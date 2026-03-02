@@ -9,7 +9,9 @@ typedef enum
 	IDENTIFIER,
 	EQUAL,
 	SEMICOLON,
-	INT_VALUE
+	INT_VALUE,
+	IF,
+	Print,
 } TokenType;
 
 typedef enum
@@ -99,6 +101,10 @@ Token next_token(Lexer *lexer)
 			if (strcmp(temp_token, "int") == 0)
 			{
 				token.type = INT; 
+			} else if (strcmp(temp_token, "print") == 0) {
+				token.type = Print;
+			} else if (strcmp(temp_token, "if") == 0) {
+				token.type = IF;
 			}
 			return token;
 		}
