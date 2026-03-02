@@ -56,7 +56,7 @@ Token next_token(Lexer *lexer)
 	char temp_token[64]; 
 	int temp_token_tracker = 0;
 
-	while (state != ACCEPT)
+	while (lexer->position < strlen(lexer->input))
 	{
 		char current_char = peek(lexer);
 		if (state == START && current_char == '=')
@@ -92,15 +92,12 @@ Token next_token(Lexer *lexer)
 
 			Token token;
 			token.type = IDENTIFIER;
-			token.value.string_value = temp_token;
-
-			printf("Token: %s\n", temp_token);
+			token.value.string_value = strdup(temp_token);
 			
 			if (strcmp(temp_token, "int") == 0)
 			{
 				token.type = INT; 
 			}
-			printf("Token type: %d\n", token.type);
 			return token;
 		}
 		else if (state == START && isdigit(current_char))
@@ -119,12 +116,14 @@ Token next_token(Lexer *lexer)
 		else if (state == IN_INTEGER)
 		{
 			temp_token[temp_token_tracker] = '\0';
-			lexer->position++;
 
 			Token token;
 			token.type = INT_VALUE;
 			token.value.int_value = atoi(temp_token); // convert string to int
 			return token;
+		}
+		else {
+			lexer->position++;
 		}
 	}
 	Token token;
@@ -137,7 +136,16 @@ int main()
 	printf("%s", str);
 	Lexer lexer = new_lexer(str);
 	Token token = next_token(&lexer);
+	printf("Token type: %d, Token: %s\n", token.type, token.value);
 	Token token2 = next_token(&lexer);
-
+	printf("Token type: %d, Token: %s\n", token2.type, token2.value);
+	Token token3 = next_token(&lexer);
+	printf("Token type: %d, Token: %s\n", token3.type, token3.value);
+	Token token4 = next_token(&lexer);
+	printf("Token type: %d, Token: %d\n", token4.type, token4.value);
+	Token token5 = next_token(&lexer);
+	printf("Token type: %d, Token: %s\n", token5.type, token5.value);
+	
+	
 	return 0;
 }
