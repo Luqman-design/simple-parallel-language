@@ -56,8 +56,12 @@ primary ::= INT_VALUE | STRING_VALUE | IDENTIFIER | "(" expression ")"
 */
 
 static Token consume(Lexer *lexer) { return next_token(lexer); }
+static Token peek(Lexer *lexer) {
+  Lexer copy = *lexer;
+  return next_token(&copy);
+}
 
-static Node *parse_statement(Lexer *lexer, Token current);
+static Node *parse_statement(Lexer *lexer);
 static Node *parse_if_statement(Lexer *lexer);
 static Node *parse_print(Lexer *lexer);
 static Node *parse_var_declaration(Lexer *lexer, TokenType var_type);
@@ -73,15 +77,24 @@ static Node *parse_primary(Lexer *lexer);
 Node *parse(Lexer *lexer) {
   Node *node = malloc(sizeof(Node));
   node->type = NODE_PROGRAM;
+
+  parse_statement(lexer);
+
   node->body.program.statements = NULL;
   node->body.program.count = 0;
   return node;
 }
 
 // statement ::= IfStatement | Print | VarDeclaration
-static Node *parse_statement(Lexer *lexer, Token current) {
+static Node *parse_statement(Lexer *lexer) {
   Node *node = malloc(sizeof(Node));
-  node->type = NODE_PRINT;
+
+  Token token = peek(lexer);
+  if (token.type == PRINT) {
+    Node *node = parse_print(lexer);
+    node->type = NODE_PRINT;
+  }
+
   return node;
 }
 
@@ -100,9 +113,26 @@ static Node *parse_if_statement(Lexer *lexer) {
 
 // Print ::= "print" "(" expression ")" ";"
 static Node *parse_print(Lexer *lexer) {
+  printf("PRINT STATEMENT\n");
+
   Node *node = malloc(sizeof(Node));
   node->type = NODE_PRINT;
-  node->body.print.value = NULL;
+
+  consume(lexer); // print
+  consume(lexer); // (
+  Node *expression = parse_expression(lexer);
+  node->body.print.value = expression;
+  consume(lexer); // )
+  consume(lexer); // ;
+
+  if (expression->type == NODE_INT_VALUE) {
+    printf("print(%d);\n", node->body.print.value->body.int_value.value);
+  } else if (expression->type == NODE_STRING_VALUE) {
+    printf("print(%s);\n", node->body.print.value->body.string_value.value);
+  } else if (expression->type == NODE_IDENTIFIER) {
+    printf("print(%s);\n", node->body.print.value->body.string_value.value);
+  } 
+
   return node;
 }
 
@@ -127,7 +157,12 @@ static Node *parse_block(Lexer *lexer) {
 
 // expression ::= comparison (("&&" | "||") comparison)*
 static Node *parse_expression(Lexer *lexer) {
+  printf("EXPRESSION\n");
+
   Node *node = malloc(sizeof(Node));
+
+  return parse_comparison(lexer);
+
   node->type = NODE_BINARY_OPERATION;
   node->body.binary_operation._operator = AND;
   node->body.binary_operation.left = NULL;
@@ -137,7 +172,12 @@ static Node *parse_expression(Lexer *lexer) {
 
 // comparison ::= term (("==" | "!=" | "<" | ">" | "<=" | ">=") term)*
 static Node *parse_comparison(Lexer *lexer) {
+  printf("COMPARISON\n");
+
   Node *node = malloc(sizeof(Node));
+
+  return parse_term(lexer);
+
   node->type = NODE_BINARY_OPERATION;
   node->body.binary_operation._operator = EQUAL_EQUAL;
   node->body.binary_operation.left = NULL;
@@ -147,7 +187,12 @@ static Node *parse_comparison(Lexer *lexer) {
 
 // term ::= factor (("+" | "-") factor)*
 static Node *parse_term(Lexer *lexer) {
+  printf("TERM\n");
+
   Node *node = malloc(sizeof(Node));
+
+  return parse_factor(lexer);
+
   node->type = NODE_BINARY_OPERATION;
   node->body.binary_operation._operator = PLUS;
   node->body.binary_operation.left = NULL;
@@ -157,7 +202,12 @@ static Node *parse_term(Lexer *lexer) {
 
 // factor ::= unary (("*" | "/") unary)*
 static Node *parse_factor(Lexer *lexer) {
+  printf("FACTOR\n");
+
   Node *node = malloc(sizeof(Node));
+
+  return parse_unary(lexer);
+
   node->type = NODE_BINARY_OPERATION;
   node->body.binary_operation._operator = MULTIPLY;
   node->body.binary_operation.left = NULL;
@@ -167,7 +217,12 @@ static Node *parse_factor(Lexer *lexer) {
 
 // unary ::= "!" unary | primary
 static Node *parse_unary(Lexer *lexer) {
+  printf("UNARY\n");
+
   Node *node = malloc(sizeof(Node));
+  
+  return parse_primary(lexer);
+  
   node->type = NODE_UNARY_OPERATION;
   node->body.unary_operation._operator = NOT;
   node->body.unary_operation.operand = NULL;
@@ -176,8 +231,26 @@ static Node *parse_unary(Lexer *lexer) {
 
 // primary ::= INT_VALUE | STRING_VALUE | IDENTIFIER | "(" expression ")"
 static Node *parse_primary(Lexer *lexer) {
+  printf("PRIMARY\n");
+
   Node *node = malloc(sizeof(Node));
-  node->type = NODE_INT_VALUE;
-  node->body.int_value.value = 0;
+  
+  Token token = consume(lexer);
+  
+  if (token.type == INT_VALUE) {
+    node->type = NODE_INT_VALUE;
+    node->body.int_value.value = token.value.int_value;
+  } else if (token.type == STRING_VALUE) {
+    node->type = NODE_STRING_VALUE;
+    node->body.string_value.value = token.value.string_value;
+  } else if (token.type == IDENTIFIER) {
+    node->type = NODE_IDENTIFIER;
+    node->body.string_value.value = token.value.string_value;
+  } else if (token.type == LEFT_PAREN) {
+    Node *expression = parse_expression(lexer);
+    consume(lexer); // )
+    return expression;
+  }
+
   return node;
 }
