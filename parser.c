@@ -208,6 +208,16 @@ static Node *parse_expression(Lexer *lexer) {
 
   Node *node = malloc(sizeof(Node));
 
+  
+  Node *comparison = parse_comparison(lexer);
+  if (peek(lexer).type == AND || peek(lexer).type == OR) {
+    consume(lexer);
+    Node *comparison2 = parse_comparison(lexer);
+    
+
+  }
+
+
   return parse_comparison(lexer);
 
   node->type = NODE_BINARY_OPERATION;
