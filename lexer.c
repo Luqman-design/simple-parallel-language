@@ -15,175 +15,175 @@ Lexer new_lexer(char *input) {
 static char peek(Lexer *lexer) { return lexer->input[lexer->position]; }
 
 Token next_token(Lexer *lexer) {
-  State state = START;
-  char temp_token[64];
-  int temp_token_tracker = 0;
+  LexerState state = STATE_START;
+  char current_token_buffer[64];
+  int current_token_length = 0;
 
   while (lexer->position < lexer->length) {
-    char current_char = peek(lexer);
+    char current_character = peek(lexer);
 
     // Symbols
-    if (state == START && current_char == ';') {
+    if (state == STATE_START && current_character == ';') {
       Token token;
-      token.type = SEMI_COLON;
+      token.type = TOKEN_SEMICOLON;
       lexer->position++;
       return token;
-    } else if (state == START && current_char == '(') {
+    } else if (state == STATE_START && current_character == '(') {
       Token token;
-      token.type = LEFT_PAREN;
+      token.type = TOKEN_LEFT_PAREN;
       lexer->position++;
       return token;
-    } else if (state == START && current_char == ')') {
+    } else if (state == STATE_START && current_character == ')') {
       Token token;
-      token.type = RIGHT_PAREN;
+      token.type = TOKEN_RIGHT_PAREN;
       lexer->position++;
       return token;
-    } else if (state == START && current_char == '{') {
+    } else if (state == STATE_START && current_character == '{') {
       Token token;
-      token.type = LEFT_CURLYBRACKET;
+      token.type = TOKEN_LEFT_CURLYBRACKET;
       lexer->position++;
       return token;
-    } else if (state == START && current_char == '}') {
+    } else if (state == STATE_START && current_character == '}') {
       Token token;
-      token.type = RIGHT_CURLYBRACKET;
+      token.type = TOKEN_RIGHT_CURLYBRACKET;
       lexer->position++;
       return token;
-    } else if (state == START && current_char == '+') {
+    } else if (state == STATE_START && current_character == '+') {
       Token token;
-      token.type = PLUS;
+      token.type = TOKEN_PLUS;
       lexer->position++;
       return token;
-    } else if (state == START && current_char == '-') {
+    } else if (state == STATE_START && current_character == '-') {
       Token token;
-      token.type = MINUS;
+      token.type = TOKEN_MINUS;
       lexer->position++;
       return token;
-    } else if (state == START && current_char == '*') {
+    } else if (state == STATE_START && current_character == '*') {
       Token token;
-      token.type = MULTIPLY;
+      token.type = TOKEN_MULTIPLY;
       lexer->position++;
       return token;
-    } else if (state == START && current_char == '/') {
+    } else if (state == STATE_START && current_character == '/') {
       Token token;
-      token.type = DIVIDE;
+      token.type = TOKEN_DIVIDE;
       lexer->position++;
       return token;
     }
 
     // Operators
-    else if (state == START && (current_char == '=' || current_char == '<' ||
-                                current_char == '>' || current_char == '&' ||
-                                current_char == '|' || current_char == '!')) {
-      temp_token[temp_token_tracker] = current_char;
-      temp_token_tracker++;
+    else if (state == STATE_START && (current_character == '=' || current_character == '<' ||
+                                current_character == '>' || current_character == '&' ||
+                                current_character == '|' || current_character == '!')) {
+      current_token_buffer[current_token_length] = current_character;
+      current_token_length++;
       lexer->position++;
-      state = IN_OPERATOR;
-    } else if (state == IN_OPERATOR &&
-               (current_char == '=' || current_char == '<' ||
-                current_char == '>' || current_char == '&' ||
-                current_char == '|' || current_char == '!')) {
-      temp_token[temp_token_tracker] = current_char;
-      temp_token_tracker++;
+      state = STATE_IN_OPERATOR;
+    } else if (state == STATE_IN_OPERATOR &&
+               (current_character == '=' || current_character == '<' ||
+                current_character == '>' || current_character == '&' ||
+                current_character == '|' || current_character == '!')) {
+      current_token_buffer[current_token_length] = current_character;
+      current_token_length++;
       lexer->position++;
-    } else if (state == IN_OPERATOR) {
-      temp_token[temp_token_tracker] = '\0';
+    } else if (state == STATE_IN_OPERATOR) {
+      current_token_buffer[current_token_length] = '\0';
 
       Token token;
 
-      if (strcmp(temp_token, "=") == 0) {
-        token.type = EQUAL;
-      } else if (strcmp(temp_token, "==") == 0) {
-        token.type = EQUAL_EQUAL;
-      } else if (strcmp(temp_token, "<") == 0) {
-        token.type = LESS;
-      } else if (strcmp(temp_token, ">") == 0) {
-        token.type = GREATER;
-      } else if (strcmp(temp_token, "<=") == 0) {
-        token.type = LESS_EQUAL;
-      } else if (strcmp(temp_token, ">=") == 0) {
-        token.type = GREATER_EQUAL;
-      } else if (strcmp(temp_token, "!") == 0) {
-        token.type = NOT;
-      } else if (strcmp(temp_token, "!=") == 0) {
-        token.type = NOT_EQUAL;
-      } else if (strcmp(temp_token, "&&") == 0) {
-        token.type = AND;
-      } else if (strcmp(temp_token, "||") == 0) {
-        token.type = OR;
+      if (strcmp(current_token_buffer, "=") == 0) {
+        token.type = TOKEN_EQUAL;
+      } else if (strcmp(current_token_buffer, "==") == 0) {
+        token.type = TOKEN_EQUAL_EQUAL;
+      } else if (strcmp(current_token_buffer, "<") == 0) {
+        token.type = TOKEN_LESS;
+      } else if (strcmp(current_token_buffer, ">") == 0) {
+        token.type = TOKEN_GREATER;
+      } else if (strcmp(current_token_buffer, "<=") == 0) {
+        token.type = TOKEN_LESS_EQUAL;
+      } else if (strcmp(current_token_buffer, ">=") == 0) {
+        token.type = TOKEN_GREATER_EQUAL;
+      } else if (strcmp(current_token_buffer, "!") == 0) {
+        token.type = TOKEN_NOT;
+      } else if (strcmp(current_token_buffer, "!=") == 0) {
+        token.type = TOKEN_NOT_EQUAL;
+      } else if (strcmp(current_token_buffer, "&&") == 0) {
+        token.type = TOKEN_AND;
+      } else if (strcmp(current_token_buffer, "||") == 0) {
+        token.type = TOKEN_OR;
       } else {
-        token.type = ILLEGAL;
+        token.type = TOKEN_ILLEGAL;
       }
 
       return token;
     }
 
     // Identifiers & Keywords
-    else if (state == START && (current_char == '_' || isalpha(current_char))) {
-      temp_token[temp_token_tracker] = current_char;
-      temp_token_tracker++;
+    else if (state == STATE_START && (current_character == '_' || isalpha(current_character))) {
+      current_token_buffer[current_token_length] = current_character;
+      current_token_length++;
       lexer->position++;
-      state = IN_IDENTIFIER;
-    } else if (state == IN_IDENTIFIER &&
-               (current_char == '_' || isalpha(current_char))) {
-      temp_token[temp_token_tracker] = current_char;
-      temp_token_tracker++;
+      state = STATE_IN_IDENTIFIER;
+    } else if (state == STATE_IN_IDENTIFIER &&
+               (current_character == '_' || isalpha(current_character))) {
+      current_token_buffer[current_token_length] = current_character;
+      current_token_length++;
       lexer->position++;
-    } else if (state == IN_IDENTIFIER) {
-      temp_token[temp_token_tracker] = '\0';
+    } else if (state == STATE_IN_IDENTIFIER) {
+      current_token_buffer[current_token_length] = '\0';
 
       Token token;
-      token.type = IDENTIFIER;
-      token.value.string_value = strdup(temp_token);
+      token.type = TOKEN_IDENTIFIER;
+      token.value.string_value = strdup(current_token_buffer);
 
-      if (strcmp(temp_token, "int") == 0) {
-        token.type = INT_TYPE;
-      } else if (strcmp(temp_token, "string") == 0) {
-        token.type = STRING_TYPE;
-      } else if (strcmp(temp_token, "print") == 0) {
-        token.type = PRINT;
-      } else if (strcmp(temp_token, "if") == 0) {
-        token.type = IF;
-      } else if (strcmp(temp_token, "else") == 0) {
-        token.type = ELSE;
+      if (strcmp(current_token_buffer, "int") == 0) {
+        token.type = TOKEN_INT_TYPE;
+      } else if (strcmp(current_token_buffer, "string") == 0) {
+        token.type = TOKEN_STRING_TYPE;
+      } else if (strcmp(current_token_buffer, "print") == 0) {
+        token.type = TOKEN_PRINT;
+      } else if (strcmp(current_token_buffer, "if") == 0) {
+        token.type = TOKEN_IF;
+      } else if (strcmp(current_token_buffer, "else") == 0) {
+        token.type = TOKEN_ELSE;
       }
 
       return token;
     }
 
     // Strings
-    else if (state == START && current_char == '"') {
+    else if (state == STATE_START && current_character == '"') {
       lexer->position++;
-      state = IN_STRING;
-    } else if (state == IN_STRING && current_char != '"') {
-      temp_token[temp_token_tracker] = current_char;
-      temp_token_tracker++;
+      state = STATE_IN_STRING;
+    } else if (state == STATE_IN_STRING && current_character != '"') {
+      current_token_buffer[current_token_length] = current_character;
+      current_token_length++;
       lexer->position++;
-    } else if (state == IN_STRING && current_char == '"') {
-      temp_token[temp_token_tracker] = '\0';
+    } else if (state == STATE_IN_STRING && current_character == '"') {
+      current_token_buffer[current_token_length] = '\0';
       lexer->position++;
 
       Token token;
-      token.type = STRING_VALUE;
-      token.value.string_value = strdup(temp_token);
+      token.type = TOKEN_STRING_VALUE;
+      token.value.string_value = strdup(current_token_buffer);
       return token;
     }
 
     // Integers
-    else if (state == START && isdigit(current_char)) {
-      temp_token[temp_token_tracker] = current_char;
-      temp_token_tracker++;
+    else if (state == STATE_START && isdigit(current_character)) {
+      current_token_buffer[current_token_length] = current_character;
+      current_token_length++;
       lexer->position++;
-      state = IN_INTEGER;
-    } else if (state == IN_INTEGER && isdigit(current_char)) {
-      temp_token[temp_token_tracker] = current_char;
-      temp_token_tracker++;
+      state = STATE_IN_INTEGER;
+    } else if (state == STATE_IN_INTEGER && isdigit(current_character)) {
+      current_token_buffer[current_token_length] = current_character;
+      current_token_length++;
       lexer->position++;
-    } else if (state == IN_INTEGER) {
-      temp_token[temp_token_tracker] = '\0';
+    } else if (state == STATE_IN_INTEGER) {
+      current_token_buffer[current_token_length] = '\0';
 
       Token token;
-      token.type = INT_VALUE;
-      token.value.int_value = atoi(temp_token);
+      token.type = TOKEN_INT_VALUE;
+      token.value.int_value = atoi(current_token_buffer);
       return token;
     }
 

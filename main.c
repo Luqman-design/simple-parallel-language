@@ -3,16 +3,8 @@
 #include <stdio.h>
 
 int main() {
-  char *str = "10 && 5\n";
-  printf("Input: %s", str);
+  char *str = "if(a < b){print(x);}\n";
   Lexer lexer = new_lexer(str);
-
-  Lexer lexer_copy = lexer;
-  Token token;
-  while (lexer_copy.position < lexer_copy.length - 1) {
-    token = next_token(&lexer_copy);
-    printf("Token: %d\n", token.type);
-  }
 
   Node *root = parse(&lexer);
 

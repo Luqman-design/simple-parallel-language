@@ -20,35 +20,32 @@ typedef struct Node {
   union {
     struct {
       struct Node **statements;
-      int count;
+      int statement_count;
     } program;
     struct {
       struct Node **statements;
-      int count;
+      int statement_count;
     } block;
     struct {
-      TokenType var_type;
-      char *name;
-      struct Node *value;
+      TokenType variable_type;
+      char *variable_name;
+      struct Node *variable_value;
     } var_declaration;
     struct {
       struct Node *condition;
-      struct {
-        struct Node **statements;
-        int count;
-      } then_block;
+      struct Node *then_branch;
       struct Node *else_branch;
     } if_statement;
     struct {
-      struct Node *value;
+      struct Node *print_value;
     } print;
     struct {
-      TokenType _operator;
-      struct Node *left;
-      struct Node *right;
+      TokenType operator_type;
+      struct Node *left_operand;
+      struct Node *right_operand;
     } binary_operation;
     struct {
-      TokenType _operator;
+      TokenType operator_type;
       struct Node *operand;
     } unary_operation;
     struct {
