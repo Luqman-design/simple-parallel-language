@@ -58,6 +58,10 @@ function codegen {
 #include <stdlib.h>
 #include <string.h>
 
+void emit_statement(Node *node, char **output, int *output_length,
+                    int *current_output_position);
+
+
 void add_to_output(int *current_output_position, int *output_length,
                    char **output, char *string_to_add) {
 
@@ -121,6 +125,7 @@ void emit_binary_operation(Node *node, char **output, int *output_length,
     add_to_output(current_output_position, output_length, output, "/");
     break;
   default:
+  	perror("Erorr occurred");
     break;
   }
 
@@ -139,6 +144,13 @@ void emit_binary_operation(Node *node, char **output, int *output_length,
   add_to_output(current_output_position, output_length, output, ")");
 }
 
+void emit_block(Node *node, char **output, int *output_length, int *current_output_position) {
+	    for (int i = 0; i < node->body.block.statement_count; i++) {
+	    	      emit_statement(node->body.block.statements[i], output, output_length,
+	    	                           current_output_position);
+	    }
+}
+
 void emit_statement(Node *node, char **output, int *output_length,
                     int *current_output_position) {
 
@@ -148,7 +160,21 @@ void emit_statement(Node *node, char **output, int *output_length,
                           output_length, current_output_position);
     add_to_output(current_output_position, output_length, output, "){");
 
+	emit_block(node->body.if_statement.then_branch, output, output_length, current_output_position);
+
+	
     add_to_output(current_output_position, output_length, output, "}");
+  } else if (node->type == NODE_PRINT) {
+  	add_to_output(current_output_position, output_length, output, "printf(");
+
+  	if (node->body.print.print_value->type == NODE_INT_VALUE) {
+  		char buffer[20];
+  		    snprintf(buffer, sizeof(buffer), "%d",
+  		                 node->body.print.print_value->body.int_value.value);
+  		                 
+  		add_to_output(current_output_position, output_length, output, buffer);
+  		add_to_output(current_output_position, output_length, output, ");");
+  	}
   }
 }
 
@@ -163,7 +189,8 @@ void emit_program(Node *node, char **output, int *output_length,
   */
   if (node->type == NODE_PROGRAM) {
     add_to_output(current_output_position, output_length, output,
-                  "#include <stdlib.h> \
+                  "#include <stdlib.h> \n\
+                   #include <stdio.h> \n\
                    int main() {");
 
     // For each statement in Program
@@ -185,10 +212,25 @@ int main() {
   Lexer lexer = new_lexer(str);
 
   Node *root = parse(&lexer);
+  printf("Statements: %d\n", root->body.program.statement_count);
 
   emit_program(root, &output, &output_length, &current_output_position);
 
   printf("\nResult:\n%s\n", output);
+
+  FILE *f = fopen("temp.c", "w");
+  	if (!f) {
+  		perror("fopen");
+  		return 1;
+  	}
+
+  fputs (output, f);
+  fclose(f);
+
+  free(output);
+	
+  system("gcc temp.c -o temp.exe");
+  system("temp.exe");
 
   return 0;
 }

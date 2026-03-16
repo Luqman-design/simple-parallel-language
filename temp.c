@@ -1,0 +1,1 @@
+#include <stdlib.h>                    int main() {if ((2<3)){printf(69);}return 0;}
