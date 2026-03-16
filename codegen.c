@@ -70,9 +70,68 @@ void add_to_output(int *current_output_position, int *output_length,
   *current_output_position += strlen(string_to_add);
 }
 
+void emit_binary_operation(Node *node, char **output, int *output_length, int *current_output_position) {
+	add_to_output(current_output_position, output_length, output, "(");
+	if (node->body.binary_operation.left_operand == NODE_BINARY_OPERATION) {
+		emit_binary_operation(node, output, output_length, current_output_position);
+	} else if (node->body.binary_operation.left_operand == NODE_INT_VALUE) {
+		add_to_output(current_output_position, output_length, output, itoa(node->body.binary_operation.left_operand.body.int_value.value));
+	}
+
+	switch (node->body.binary_operation.operator_type) {
+		case TOKEN_EQUAL_EQUAL:
+			add_to_output(current_output_position, output_length, output, "==");
+			break;
+		case TOKEN_NOT_EQUAL:
+			add_to_output(current_output_position, output_length, output, "!=");
+			break;
+		case TOKEN_GREATER:
+			add_to_output(current_output_position, output_length, output, ">");
+			break;
+		case TOKEN_LESS:
+			add_to_output(current_output_position, output_length, output, "<");
+			break;
+		case TOKEN_GREATER_EQUAL:
+			add_to_output(current_output_position, output_length, output, ">=");
+			break;
+		case TOKEN_LESS_EQUAL:
+			add_to_output(current_output_position, output_length, output, "<=");
+			break;
+		case TOKEN_AND:
+			add_to_output(current_output_position, output_length, output, "&&");
+			break;
+		case TOKEN_OR:
+			add_to_output(current_output_position, output_length, output, "||");
+			break;
+		case TOKEN_PLUS:
+			add_to_output(current_output_position, output_length, output, "+");
+			break;
+		case TOKEN_MINUS:
+			add_to_output(current_output_position, output_length, output, "-");
+			break;
+		case TOKEN_MULTIPLY:
+			add_to_output(current_output_position, output_length, output, "*");
+			break;
+		case TOKEN_DIVIDE:
+			add_to_output(current_output_position, output_length, output, "/");
+			break;
+	}
+
+	if (node->body.binary_operation.right_operator == NODE_BINARY_OPERATION) {
+		emit_binary_operation(node, output, output_length, current_output_position);
+	} else if (node->body.binary_operation.right_operand NODE_INT_VALUE) {
+		add_to_output(current_output_position, output_length, output, itoa(node->body.binary_operation.right_operand.body.int_value.value));
+	}
+	
+	add_to_output(current_output_position, output_length, output, ")");
+}
+
 void emit_statement(Node *node, char **output, int *output_length,
                     int *current_output_position) {
+
   if (node->type == NODE_IF_STATEMENT) {
+  	add_to_output(current_output_position, output_length, output, "if (");
+  	emit_binary_operation(node->body.if_statement.condition, output, output_length, current_output_position);
   }
 }
 
