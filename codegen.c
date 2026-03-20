@@ -54,6 +54,7 @@ function codegen {
 
 #include "lexer.h"
 #include "parser.h"
+#include "semantic_analyzer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -171,17 +172,40 @@ void emit_statement(Node *node, char **output, int *output_length,
     add_to_output(current_output_position, output_length, output, "}");
 
   } else if (node->type == NODE_PRINT) {
-    add_to_output(current_output_position, output_length, output,
-                  "printf(\"%d\",");
-
     if (node->body.print.print_value->type == NODE_INT_VALUE) {
-      char buffer[20];
-      snprintf(buffer, sizeof(buffer), "%d",
+    	add_to_output(current_output_position, output_length, output,
+    	                  "printf(\"%d\",");
+        char buffer[20];
+        snprintf(buffer, sizeof(buffer), "%d",
                node->body.print.print_value->body.int_value.value);
 
-      add_to_output(current_output_position, output_length, output, buffer);
-      add_to_output(current_output_position, output_length, output, ");");
+        add_to_output(current_output_position, output_length, output, buffer);
+        add_to_output(current_output_position, output_length, output, ");");
+    } else if (node->body.print.print_value->type == NODE_IDENTIFIER) {
+    add_to_output(current_output_position, output_length, output,
+        	                  "printf(");
+
+ 	    // if (node->body.print.print_value->body.print.print_value == NODE_INT_VALUE)
+    	
+    	add_to_output(current_output_position, output_length, output,
+    	              node->body.print.print_value->body.string_value.value);
+    	add_to_output(current_output_position, output_length, output, ");");
     }
+  } else if (node->type == NODE_VAR_DECLARATION) {
+  	if (node->body.var_declaration.variable_type == TOKEN_INT_TYPE) {
+  		add_to_output(current_output_position, output_length, output, "int ");
+  		
+  	}
+  	add_to_output(current_output_position, output_length, output, node->body.var_declaration.variable_name);
+  	add_to_output(current_output_position, output_length, output, "=");
+	if (node->body.var_declaration.variable_type == TOKEN_INT_TYPE) {
+		 char buffer[20];
+		 snprintf(buffer, sizeof(buffer), "%d",
+		         node->body.var_declaration.variable_value->body.int_value.value);
+		         
+		add_to_output(current_output_position, output_length, output, buffer);
+	}
+	add_to_output(current_output_position, output_length, output, ";");
   }
 }
 
@@ -211,7 +235,7 @@ void emit_program(Node *node, char **output, int *output_length,
 }
 
 int main() {
-  char *str = "if(2 < 3){print(69);}\n";
+  char *str = "int x = 1;\n";
   int output_length = 30;
   int current_output_position = 0;
   char *output = (char *)malloc((output_length + 1) * sizeof(char));
@@ -219,6 +243,8 @@ int main() {
   Lexer lexer = new_lexer(str);
 
   Node *root = parse(&lexer);
+
+  semantic_analysis(root);
 
   emit_program(root, &output, &output_length, &current_output_position);
 
@@ -236,7 +262,7 @@ int main() {
   free(output);
 
   system("gcc temp.c -o temp.exe");
-  system("./temp.exe");
+  system(".\\temp.exe");
 
   return 0;
 }

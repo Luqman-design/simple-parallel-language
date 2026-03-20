@@ -54,6 +54,10 @@ typedef struct Node {
     struct {
       char *value;
     } string_value;
+    struct {
+      TokenType type;
+      char *name;
+    } identifier;
   } body;
 } Node;
 

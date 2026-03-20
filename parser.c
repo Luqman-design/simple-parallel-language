@@ -428,7 +428,8 @@ static Node *parse_primary(Lexer *lexer) {
   } else if (token.type == TOKEN_IDENTIFIER) {
     Node *node = malloc(sizeof(Node));
     node->type = NODE_IDENTIFIER;
-    node->body.string_value.value = token.value.string_value;
+    node->body.identifier.name = token.value.string_value;
+    // node->body.identifier.type = 
     return node;
   } else if (token.type == TOKEN_LEFT_PAREN) {
     Node *expression = parse_expression(lexer);
