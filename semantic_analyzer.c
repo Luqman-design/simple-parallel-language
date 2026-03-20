@@ -54,4 +54,57 @@ steps:
 
 */
 
-void semantic_analysis(Node *root) {}
+typedef struct {
+  TokenType type;
+  char[32] name;
+} variable;
+
+typedef struct {
+  char key[32];
+  variable *variable;
+  UT_hash_handle hash_handle;
+} declaration;
+
+void semantic_analysis(Node *root) {
+  int n = 2;
+  declaration **map = calloc(n, sizeof(declaration));
+
+  for (int i = 0; i < node->body.program.statement_count; i++) {
+  }
+
+  free(variables);
+
+  return;
+}
+
+/* One struct = one hashmap entry /
+typedef struct {
+    char key[32];
+    int  value;
+    UT_hash_handle hh;  // makes this struct hashable
+} Item;
+
+int main(void) {
+    / Dynamic array of hashmap pointers /
+    int n = 2;
+    Item **maps = calloc(n, sizeof(Item));  // [{}, {}]
+
+    * Fill map[0] /
+    Iteme = malloc(sizeof(Item));
+    strcpy(e->key, "score");  e->value = 42;
+    HASH_ADD_STR(maps[0], key, e);
+
+    * Fill map[1] /
+    e = malloc(sizeof(Item));
+    strcpy(e->key, "score");  e->value = 99;
+    HASH_ADD_STR(maps[1], key, e);
+
+    / Read back /
+    for (int i = 0; i < n; i++) {
+        Itemfound;
+  HASH_FIND_STR(maps[i], "score", found);
+        if (found) printf("map[%d] score = %d\n", i, found->value);
+    }
+
+    return 0;
+}
