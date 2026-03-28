@@ -150,8 +150,8 @@ TokenType analyze_expression(Node *node) {
 
     return variable->type;
   }
-  case NODE_BINARY_OPERATION: {
-    switch (node->body.binary_operation.operator_type) {
+  case NODE_BINARY_OPERATION: 
+  switch (node->body.binary_operation.operator_type) {
     case TOKEN_PLUS:
       check_operators(
           node,
@@ -208,7 +208,10 @@ TokenType analyze_expression(Node *node) {
       check_operators(node,
                       "Semantic error: logical operations only valid for type "
                       "int on type int\n");
-    }
+    default:
+      printf("Semantic error: Unsupported operator in binary operation\n");
+      exit(1);
+  }
   case NODE_UNARY_OPERATION: {
     TokenType operand_type =
         analyze_expression(node->body.unary_operation.operand);
@@ -222,8 +225,8 @@ TokenType analyze_expression(Node *node) {
     printf("Semantic error: Unsupported node type in expression analysis\n");
     exit(1);
   }
-  }
 }
+
 
 void analyze_node(Node *node) {
   switch (node->type) {
@@ -297,7 +300,7 @@ void semantic_analysis(Node *root) { analyze_node(root); }
      Return type: int (bruger int, da vi ikke har boolean)
 
   3. Equality (==, !=)
-     Egens typer (int == int, string == string)
+     Ens typer (int == int, string == string)
      Return type: int
 
   4. Logical (&&, ||)
