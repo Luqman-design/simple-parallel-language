@@ -89,6 +89,12 @@ void emit_binary_operation(Node *node, char **output, int *output_length,
              node->body.binary_operation.left_operand->body.int_value.value);
 
     add_to_output(current_output_position, output_length, output, buffer);
+  } else if (node->body.binary_operation.left_operand->type ==
+             NODE_IDENTIFIER) {
+    // The valitity of the types was checked in the semantic analysis.
+    add_to_output(
+        current_output_position, output_length, output,
+        node->body.binary_operation.left_operand->body.identifier.name);
   }
 
   switch (node->body.binary_operation.operator_type) {
@@ -144,6 +150,12 @@ void emit_binary_operation(Node *node, char **output, int *output_length,
              node->body.binary_operation.right_operand->body.int_value.value);
 
     add_to_output(current_output_position, output_length, output, buffer);
+  } else if (node->body.binary_operation.right_operand->type ==
+             NODE_IDENTIFIER) {
+    // The valitity of the types was checked in the semantic analysis.
+    add_to_output(
+        current_output_position, output_length, output,
+        node->body.binary_operation.right_operand->body.identifier.name);
   }
 
   add_to_output(current_output_position, output_length, output, ")");
@@ -240,7 +252,7 @@ void emit_program(Node *node, char **output, int *output_length,
 }
 
 int main() {
-  char *str = "if (2 < 3) {int x = 1; print(x);}\n";
+  char *str = "int a = 2; if (a < 3) {int x = 5; print(x);}\n";
   int output_length = 30;
   int current_output_position = 0;
   char *output = (char *)malloc((output_length + 1) * sizeof(char));
