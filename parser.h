@@ -6,8 +6,10 @@ typedef enum {
   NODE_PROGRAM,
   NODE_BLOCK,
   NODE_VAR_DECLARATION,
+  NODE_VAR_UPDATE,
   NODE_IF_STATEMENT,
   NODE_PRINT,
+  NODE_FOR_LOOP,
   NODE_BINARY_OPERATION,
   NODE_UNARY_OPERATION,
   NODE_INT_VALUE,
@@ -32,10 +34,21 @@ typedef struct Node {
       struct Node *variable_value;
     } var_declaration;
     struct {
+      char *variable_name;
+      TokenType _operator;
+      struct Node *binary_operation;
+    } var_update;
+    struct {
       struct Node *condition;
       struct Node *then_branch;
       struct Node *else_branch;
     } if_statement;
+    struct {
+      struct Node *initializer;
+      struct Node *condition;
+      struct Node *updater;
+      struct Node *body;
+    } for_loop;
     struct {
       struct Node *print_value;
     } print;
@@ -55,7 +68,7 @@ typedef struct Node {
       char *value;
     } string_value;
     struct {
-      TokenType type;
+      TokenType type; // Assigned at semantic analysis
       char *name;
     } identifier;
   } body;

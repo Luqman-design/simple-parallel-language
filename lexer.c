@@ -76,16 +76,6 @@ Token next_token(Lexer *lexer) {
       token.type = TOKEN_RIGHT_CURLYBRACKET;
       lexer->position++;
       return token;
-    } else if (state == STATE_START && current_character == '+') {
-      Token token;
-      token.type = TOKEN_PLUS;
-      lexer->position++;
-      return token;
-    } else if (state == STATE_START && current_character == '-') {
-      Token token;
-      token.type = TOKEN_MINUS;
-      lexer->position++;
-      return token;
     } else if (state == STATE_START && current_character == '*') {
       Token token;
       token.type = TOKEN_MULTIPLY;
@@ -99,9 +89,11 @@ Token next_token(Lexer *lexer) {
     }
 
     // Operators
-    else if (state == STATE_START && (current_character == '=' || current_character == '<' ||
-                                current_character == '>' || current_character == '&' ||
-                                current_character == '|' || current_character == '!')) {
+    else if (state == STATE_START &&
+             (current_character == '=' || current_character == '<' ||
+              current_character == '>' || current_character == '&' ||
+              current_character == '|' || current_character == '!' ||
+              current_character == '+' || current_character == '-')) {
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
@@ -109,7 +101,8 @@ Token next_token(Lexer *lexer) {
     } else if (state == STATE_IN_OPERATOR &&
                (current_character == '=' || current_character == '<' ||
                 current_character == '>' || current_character == '&' ||
-                current_character == '|' || current_character == '!')) {
+                current_character == '|' || current_character == '!' ||
+                current_character == '+' || current_character == '-')) {
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
@@ -138,6 +131,14 @@ Token next_token(Lexer *lexer) {
         token.type = TOKEN_AND;
       } else if (strcmp(current_token_buffer, "||") == 0) {
         token.type = TOKEN_OR;
+      } else if (strcmp(current_token_buffer, "+") == 0) {
+        token.type = TOKEN_PLUS;
+      } else if (strcmp(current_token_buffer, "-") == 0) {
+        token.type = TOKEN_MINUS;
+      } else if (strcmp(current_token_buffer, "+=") == 0) {
+        token.type = TOKEN_PLUS_EQUAL;
+      } else if (strcmp(current_token_buffer, "-=") == 0) {
+        token.type = TOKEN_MINUS_EQUAL;
       } else {
         token.type = TOKEN_ILLEGAL;
       }
@@ -146,7 +147,8 @@ Token next_token(Lexer *lexer) {
     }
 
     // Identifiers & Keywords
-    else if (state == STATE_START && (current_character == '_' || isalpha(current_character))) {
+    else if (state == STATE_START &&
+             (current_character == '_' || isalpha(current_character))) {
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
@@ -173,6 +175,8 @@ Token next_token(Lexer *lexer) {
         token.type = TOKEN_IF;
       } else if (strcmp(current_token_buffer, "else") == 0) {
         token.type = TOKEN_ELSE;
+      } else if (strcmp(current_token_buffer, "for") == 0) {
+        token.type = TOKEN_FOR;
       }
 
       return token;
@@ -222,5 +226,6 @@ Token next_token(Lexer *lexer) {
   }
 
   Token token;
+  token.type = TOKEN_EOF;
   return token;
 }

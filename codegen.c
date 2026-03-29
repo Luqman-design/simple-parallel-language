@@ -252,7 +252,13 @@ void emit_program(Node *node, char **output, int *output_length,
 }
 
 int main() {
-  char *str = "int a = 2; if (a < 3) {int x = 5; print(x);}\n";
+  char *str = "int a = 2; \
+               if (a < 3) {\
+                 int x = 5; \
+                 x = 10;  \
+                 print(x); \
+               } \
+               \n";
   int output_length = 30;
   int current_output_position = 0;
   char *output = (char *)malloc((output_length + 1) * sizeof(char));

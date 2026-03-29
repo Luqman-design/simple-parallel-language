@@ -13,6 +13,7 @@
  */
 
 #include "parser.h"
+#include "lexer.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -44,7 +45,7 @@ Program(
 /* Grammar:
 Program ::= statement*
 
-statement ::= IfStatement | Print | VarDeclaration
+statement ::= IfStatement | Print | VarDeclaration | ForLoop | VarUpdate
 
 IfStatement ::= "if" "(" expression ")" "{" statement* "}"
          | "if" "(" expression ")" "{" statement* "}" "else" "{" statement* "}"
@@ -53,6 +54,12 @@ IfStatement ::= "if" "(" expression ")" "{" statement* "}"
 Print ::= "print" "(" expression ")" ";"
 
 VarDeclaration ::= ("int" | "string") IDENTIFIER "=" expression ";"
+
+VarUpdate ::= IDENTIFIER ("+" | "-")? "=" expression ";"
+
+ForLoop ::= "for" "(" VarDeclaration ";" expression ";" expression ")" "{"
+statement*
+"}"
 
 expression ::= comparison (("&&" | "||") comparison)*
 
@@ -90,6 +97,8 @@ static Node *parse_statement(Lexer *lexer);
 static Node *parse_if_statement(Lexer *lexer);
 static Node *parse_print(Lexer *lexer);
 static Node *parse_var_declaration(Lexer *lexer);
+static Node *parse_var_update(Lexer *lexer);
+static Node *parse_for_loop(Lexer *lexer);
 static Node *parse_block(Lexer *lexer);
 static Node *parse_expression(Lexer *lexer);
 static Node *parse_comparison(Lexer *lexer);
@@ -113,10 +122,12 @@ Node *parse(Lexer *lexer) {
   int statement_capacity = 4;
   Node **statements = malloc(sizeof(Node *) * statement_capacity);
 
-  while (lexer->position < lexer->length - 1) {
+  while (1) {
     Token token = peek(lexer);
-    if (token.type == TOKEN_ILLEGAL)
+
+    if (token.type == TOKEN_ILLEGAL || token.type == TOKEN_EOF) {
       break;
+    }
 
     if (statement_count >= statement_capacity) {
       statement_capacity *= 2;
@@ -148,9 +159,14 @@ static Node *parse_statement(Lexer *lexer) {
     return parse_if_statement(lexer);
   } else if (token.type == TOKEN_INT_TYPE || token.type == TOKEN_STRING_TYPE) {
     return parse_var_declaration(lexer);
+  } else if (token.type == TOKEN_IDENTIFIER) {
+    return parse_var_update(lexer);
+  } else if (token.type == TOKEN_FOR) {
+    perror("For loop not yet implemented");
   }
 
-  fprintf(stderr, "Error: Unexpected token '%s'\n", token.value.string_value);
+  fprintf(stderr, "Error: Unexpected token '%s' of type '%d'\n",
+          token.value.string_value, token.type);
   exit(1);
 }
 
@@ -238,6 +254,23 @@ static Node *parse_var_declaration(Lexer *lexer) {
 
   node->body.var_declaration.variable_name = variable_name.value.string_value;
   node->body.var_declaration.variable_value = expression;
+
+  return node;
+}
+
+// VarUpdate ::= IDENTIFIER ("+" | "-")? "=" expression ";"
+static Node *parse_var_update(Lexer *lexer) {
+  Node *node = malloc(sizeof(Node));
+  node->type = NODE_VAR_UPDATE;
+
+  Token variable_name = consume(lexer); // identifier
+  TokenType operator_type = consume(lexer).type;
+  Node *expression = parse_expression(lexer);
+  consume(lexer); // ;
+
+  node->body.var_update.variable_name = variable_name.value.string_value;
+  node->body.var_update._operator = operator_type;
+  node->body.var_update.binary_operation = expression;
 
   return node;
 }

@@ -23,7 +23,9 @@ typedef enum {
   TOKEN_AND,
   TOKEN_OR,
   TOKEN_PLUS,
+  TOKEN_PLUS_EQUAL,
   TOKEN_MINUS,
+  TOKEN_MINUS_EQUAL,
   TOKEN_MULTIPLY,
   TOKEN_DIVIDE,
 
@@ -31,6 +33,7 @@ typedef enum {
   TOKEN_IF,
   TOKEN_ELSE,
   TOKEN_PRINT,
+  TOKEN_FOR,
 
   // Symbols
   TOKEN_SEMICOLON,
@@ -41,6 +44,7 @@ typedef enum {
 
   // Other
   TOKEN_ILLEGAL,
+  TOKEN_EOF,
 } TokenType;
 
 typedef enum {
