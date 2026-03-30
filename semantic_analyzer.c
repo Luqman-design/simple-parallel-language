@@ -258,8 +258,7 @@ void analyze_node(Node *node) {
     break;
   }
   case NODE_VAR_UPDATE: {
-    TokenType variable_type =
-        analyze_expression(node->body.var_update.value);
+    TokenType variable_type = analyze_expression(node->body.var_update.value);
     char *variable_name = node->body.var_update.variable_name;
 
     VariableEntry *variable = lookup_variable(variable_name);
@@ -286,6 +285,11 @@ void analyze_node(Node *node) {
     }
     break;
   }
+
+  case NODE_FOR_LOOP:
+    TokenType for_loop_initiializer =
+        analyze_expression(node->body.for_loop.initializer);
+
   case NODE_PRINT:
     analyze_expression(node->body.print.print_value);
     break;
