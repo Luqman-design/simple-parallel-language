@@ -34,6 +34,12 @@ Lexer new_lexer(char *input) {
  */
 static char peek(Lexer *lexer) { return lexer->input[lexer->position]; }
 
+static Token peek_next(Lexer *lexer) {
+  Lexer copy = *lexer;
+  next_token(&copy);        // skip current
+  return next_token(&copy); // next token
+}
+
 /**
  * Returns the next token from the input stream and advances the position.
  * This function implements a state machine that transitions between states
@@ -84,6 +90,11 @@ Token next_token(Lexer *lexer) {
     } else if (state == STATE_START && current_character == '/') {
       Token token;
       token.type = TOKEN_DIVIDE;
+      lexer->position++;
+      return token;
+    } else if (state == STATE_START && current_character == ",") {
+      Token token;
+      token.type = TOKEN_COMMA;
       lexer->position++;
       return token;
     }
@@ -139,7 +150,7 @@ Token next_token(Lexer *lexer) {
         token.type = TOKEN_PLUS_EQUAL;
       } else if (strcmp(current_token_buffer, "-=") == 0) {
         token.type = TOKEN_MINUS_EQUAL;
-      } else if (strcmp(current_token_buffer, "++")) {
+      } else if (strcmp(current_token_buffer, "++") == 0) {
         token.type = TOKEN_PLUS_PLUS;
       } else {
         token.type = TOKEN_ILLEGAL;
@@ -179,6 +190,8 @@ Token next_token(Lexer *lexer) {
         token.type = TOKEN_ELSE;
       } else if (strcmp(current_token_buffer, "for") == 0) {
         token.type = TOKEN_FOR;
+      } else if (strcmp(current_token_buffer, "func") == 0) {
+        token.type = TOKEN_FUNCTION;
       }
 
       return token;
@@ -223,7 +236,9 @@ Token next_token(Lexer *lexer) {
 
     // Other (such as whitespaces)
     else {
-      if (current_token_buffer == ' ') {
+      if (current_token_buffer ==
+          ' ') { // måske skal vi tjekke current_character ikke buffer, da det
+                 // er et array?
         lexer->position++;
       } else {
         printf("Error: %s is an illegal symbol", current_token_buffer);

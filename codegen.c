@@ -59,11 +59,24 @@ function codegen {
 #include <stdlib.h>
 #include <string.h>
 
-void emit_statement(Node *node, char **output, int *output_length,
-                    int *current_output_position);
-
+void emit_expression(Node *node, char **output, int *output_length,
+                     int *current_output_position);
 void emit_binary_operation(Node *node, char **output, int *output_length,
                            int *current_output_position);
+void emit_block(Node *node, char **output, int *output_length,
+                int *current_output_position);
+void emit_statement(Node *node, char **output, int *output_length,
+                    int *current_output_position);
+void emit_function_declaration(Node *node, char **output, int *output_length,
+                               int *current_output_position);
+void emit_function_call(Node *node, char **output, int *output_length,
+                        int *current_output_position);
+void emit_program(Node *node, char **output, int *output_length,
+                  int *current_output_position);
+void emit_parameter(Node *node, char **output, int *output_length,
+                    int *current_output_position, int parameter_index);
+void emit_argument(Node *node, char **output, int *output_length,
+                   int *current_output_position, int parameter_index);
 
 void add_to_output(int *current_output_position, int *output_length,
                    char **output, char *string_to_add) {
@@ -100,7 +113,7 @@ void emit_expression(Node *node, char **output, int *output_length,
     break;
   }
 
-  case NODE_STRING_VALUE: 
+  case NODE_STRING_VALUE:
     add_to_output(current_output_position, output_length, output,
                   node->body.string_value.value);
     break;
@@ -135,7 +148,9 @@ void emit_binary_operation(Node *node, char **output, int *output_length,
              node->body.binary_operation.left_operand->body.int_value.value);
 
     add_to_output(current_output_position, output_length, output, buffer);
-  } else if (node->body.binary_operation.left_operand->type == // Tilføjet denne, da ("Hej" (==)/(!=) "Hej") er tilladt
+  } else if (node->body.binary_operation.left_operand
+                 ->type == // Tilføjet denne, da ("Hej" (==)/(!=) "Hej") er
+                           // tilladt
              NODE_STRING_VALUE) {
     add_to_output(
         current_output_position, output_length, output,
@@ -201,7 +216,9 @@ void emit_binary_operation(Node *node, char **output, int *output_length,
              node->body.binary_operation.right_operand->body.int_value.value);
 
     add_to_output(current_output_position, output_length, output, buffer);
-    } else if (node->body.binary_operation.left_operand->type == // Tilføjet denne, da ("Hej" (==)/(!=) "Hej") er tilladt
+  } else if (node->body.binary_operation.left_operand
+                 ->type == // Tilføjet denne, da ("Hej" (==)/(!=) "Hej") er
+                           // tilladt
              NODE_STRING_VALUE) {
     add_to_output(
         current_output_position, output_length, output,
@@ -238,9 +255,10 @@ void emit_statement(Node *node, char **output, int *output_length,
                current_output_position);
     add_to_output(current_output_position, output_length, output, "}");
     if (node->body.if_statement.else_branch != NULL) {
-      add_to_output(current_output_position, output_length, output, "else {"); // tilføjet denne
+      add_to_output(current_output_position, output_length, output,
+                    "else {"); // tilføjet denne
       emit_block(node->body.if_statement.else_branch, output, output_length,
-               current_output_position);
+                 current_output_position);
       add_to_output(current_output_position, output_length, output, "}");
     }
   } else if (node->type == NODE_PRINT) {
@@ -253,11 +271,12 @@ void emit_statement(Node *node, char **output, int *output_length,
 
       add_to_output(current_output_position, output_length, output, buffer);
       add_to_output(current_output_position, output_length, output, ");");
-    } 
-    if (node->body.print.print_value->type == NODE_STRING_VALUE) { // tilføjet denne
+    }
+    if (node->body.print.print_value->type ==
+        NODE_STRING_VALUE) { // tilføjet denne
       add_to_output(current_output_position, output_length, output,
                     "printf(\"%s\",");
-      add_to_output(current_output_position, output_length, output, 
+      add_to_output(current_output_position, output_length, output,
                     node->body.print.print_value->body.string_value.value);
       add_to_output(current_output_position, output_length, output, ");");
     } else if (node->body.print.print_value->type == NODE_IDENTIFIER) {
@@ -290,10 +309,10 @@ void emit_statement(Node *node, char **output, int *output_length,
       add_to_output(current_output_position, output_length, output, buffer);
     }
     add_to_output(current_output_position, output_length, output, ";");
-    } else if (node->body.var_declaration.variable_type == TOKEN_STRING_TYPE) {
-      add_to_output(current_output_position, output_length, output, ""); //tilføjet denne
-    } 
-  else if (node->type == NODE_VAR_UPDATE) {
+  } else if (node->body.var_declaration.variable_type == TOKEN_STRING_TYPE) {
+    add_to_output(current_output_position, output_length, output,
+                  ""); // tilføjet denne
+  } else if (node->type == NODE_VAR_UPDATE) {
     add_to_output(current_output_position, output_length, output,
                   node->body.var_update.variable_name);
 
@@ -334,6 +353,87 @@ void emit_statement(Node *node, char **output, int *output_length,
                current_output_position);
 
     add_to_output(current_output_position, output_length, output, "}");
+  }
+}
+
+void emit_function_declaration(Node *node, char **output, int *output_length,
+                               int *current_output_position) {
+  add_to_output(current_output_position, output_length, output,
+                node->body.function_declaration.function_name);
+
+  add_to_output(current_output_position, output_length, output, "(");
+
+  for (int i = 0; i < node->body.function_declaration.parameter_count; i++) {
+    emit_parameter(node, output, output_length, current_output_position, i);
+
+    if (i < node->body.function_declaration.parameter_count - 1) {
+      add_to_output(current_output_position, output_length, output, ",");
+    }
+
+    add_to_output(current_output_position, output_length, output, ") {");
+
+    emit_block(node->body.function_declaration.body, output, output_length,
+               current_output_position);
+
+    add_to_output(current_output_position, output_length, output, "}");
+  }
+}
+
+void emit_function_call(Node *node, char **output, int *output_length,
+                        int *current_output_position) {
+  add_to_output(current_output_position, output_length, output,
+                node->body.function_call.function_name);
+
+  for (int i = 0; i < node->body.function_call.argument_count; i++) {
+    emit_argument(node, output, output_length, current_output_position, i);
+
+    if (i < node->body.function_call.argument_count - 1) {
+      add_to_output(current_output_position, output_length, output, ",");
+    }
+
+    add_to_output(current_output_position, output_length, output, ");");
+  }
+}
+
+void emit_parameter(Node *node, char **output, int *output_length,
+                    int *current_output_position, int parameter_index) {
+  if (node->body.function_declaration.parameters[parameter_index]
+          .parameter_type == TOKEN_STRING_TYPE) {
+    add_to_output(current_output_position, output_length, output, "string ");
+  } else if (node->body.function_declaration.parameters[parameter_index]
+                 .parameter_type == TOKEN_INT_TYPE) {
+    add_to_output(current_output_position, output_length, output, "int ");
+  }
+
+  add_to_output(current_output_position, output_length, output,
+                node->body.function_declaration.parameters[parameter_index]
+                    .parameter_name);
+}
+
+void emit_argument(Node *node, char **output, int *output_length,
+                   int *current_output_position, int parameter_index) {
+  Node *argument = node->body.function_call.arguments[parameter_index];
+
+  switch (argument->type) {
+  case NODE_STRING_VALUE:
+    add_to_output(current_output_position, output_length, output,
+                  argument->body.string_value.value);
+    break;
+
+  case NODE_INT_VALUE:
+    char buffer[20];
+    snprintf(buffer, sizeof(buffer), "%d", node->body.int_value.value);
+
+    add_to_output(current_output_position, output_length, output, buffer);
+    break;
+
+  case NODE_IDENTIFIER:
+    add_to_output(current_output_position, output_length, output,
+                  argument->body.identifier.name);
+    break;
+
+  default:
+    add_to_output(current_output_position, output_length, output, "");
   }
 }
 

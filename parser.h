@@ -10,13 +10,19 @@ typedef enum {
   NODE_IF_STATEMENT,
   NODE_PRINT,
   NODE_FOR_LOOP,
-  NODE_FUNCTION,
+  NODE_FUNCTION_CALL,
+  NODE_FUNCTION_DECLARATION,
   NODE_BINARY_OPERATION,
   NODE_UNARY_OPERATION,
   NODE_INT_VALUE,
   NODE_STRING_VALUE,
   NODE_IDENTIFIER,
 } NodeType;
+
+typedef struct {
+  TokenType parameter_type;
+  char *parameter_name;
+} parameter;
 
 typedef struct Node {
   NodeType type;
@@ -72,6 +78,17 @@ typedef struct Node {
       TokenType type; // Assigned at semantic analysis
       char *name;
     } identifier;
+    struct {
+      char *function_name;
+      parameter parameters[20];
+      int parameter_count;
+      struct Node *body;
+    } function_declaration;
+    struct {
+      char *function_name;
+      struct Node *arguments[20];
+      int argument_count;
+    } function_call;
   } body;
 } Node;
 

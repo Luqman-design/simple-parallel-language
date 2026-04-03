@@ -43,6 +43,7 @@ typedef enum {
   TOKEN_RIGHT_PAREN,
   TOKEN_LEFT_CURLYBRACKET,
   TOKEN_RIGHT_CURLYBRACKET,
+  TOKEN_COMMA,
 
   // Other
   TOKEN_ILLEGAL,
@@ -74,5 +75,6 @@ typedef struct {
 
 Lexer new_lexer(char *input);
 Token next_token(Lexer *lexer);
+static Token peek_next(Lexer *lexer);
 
 #endif
