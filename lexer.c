@@ -86,6 +86,11 @@ Token next_token(Lexer *lexer) {
       token.type = TOKEN_DIVIDE;
       lexer->position++;
       return token;
+    } else if (state == STATE_START && current_character == ',') {
+      Token token;
+      token.type = TOKEN_COMMA;
+      lexer->position++;
+      return token;
     }
 
     // Operators
@@ -179,6 +184,12 @@ Token next_token(Lexer *lexer) {
         token.type = TOKEN_ELSE;
       } else if (strcmp(current_token_buffer, "for") == 0) {
         token.type = TOKEN_FOR;
+      } else if (strcmp(current_token_buffer, "func") == 0) {
+        token.type = TOKEN_FUNCTION;
+      } else if (strcmp(current_token_buffer, "process") == 0) {
+        token.type = TOKEN_PROCESS;
+      } else if (strcmp(current_token_buffer, "return") == 0) {
+        token.type = TOKEN_RETURN;
       }
 
       return token;

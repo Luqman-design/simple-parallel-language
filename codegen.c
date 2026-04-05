@@ -62,6 +62,9 @@ function codegen {
 void emit_statement(Node *node, char **output, int *output_length,
                     int *current_output_position);
 
+void emit_function(Node *node, char **output, int *output_length,
+                   int *current_output_position);
+
 void emit_binary_operation(Node *node, char **output, int *output_length,
                            int *current_output_position);
 
@@ -108,6 +111,20 @@ void emit_expression(Node *node, char **output, int *output_length,
   case NODE_IDENTIFIER:
     add_to_output(current_output_position, output_length, output,
                   node->body.identifier.name);
+    break;
+
+  case NODE_FUNCTION_CALL:
+    add_to_output(current_output_position, output_length, output,
+                  node->body.function_call.name);
+    add_to_output(current_output_position, output_length, output, "(");
+    for (int i = 0; i < node->body.function_call.argument_count; i++) {
+      emit_expression(node->body.function_call.arguments[i], output,
+                      output_length, current_output_position);
+      if (i < node->body.function_call.argument_count - 1) {
+        add_to_output(current_output_position, output_length, output, ", ");
+      }
+    }
+    add_to_output(current_output_position, output_length, output, ")");
     break;
 
   default:
@@ -229,6 +246,41 @@ void emit_block(Node *node, char **output, int *output_length,
   }
 }
 
+void emit_function(Node *node, char **output, int *output_length,
+                   int *current_output_position) {
+  if (node->body.function.return_type == TOKEN_INT_TYPE) {
+    add_to_output(current_output_position, output_length, output, "int ");
+  } else if (node->body.function.return_type == TOKEN_STRING_TYPE) {
+    add_to_output(current_output_position, output_length, output, "char* ");
+  }
+
+  add_to_output(current_output_position, output_length, output,
+                node->body.function.name);
+  add_to_output(current_output_position, output_length, output, "(");
+
+  for (int i = 0; i < node->body.function.param_count; i++) {
+    if (node->body.function.params[i].type == TOKEN_INT_TYPE) {
+      add_to_output(current_output_position, output_length, output, "int ");
+    } else if (node->body.function.params[i].type == TOKEN_STRING_TYPE) {
+      add_to_output(current_output_position, output_length, output, "char* ");
+    }
+    add_to_output(current_output_position, output_length, output,
+                  node->body.function.params[i].name);
+    if (i < node->body.function.param_count - 1) {
+      add_to_output(current_output_position, output_length, output, ", ");
+    }
+  }
+
+  add_to_output(current_output_position, output_length, output, ") {");
+
+  for (int i = 0; i < node->body.function.statement_count; i++) {
+    emit_statement(node->body.function.statements[i], output, output_length,
+                   current_output_position);
+  }
+
+  add_to_output(current_output_position, output_length, output, "}");
+}
+
 void emit_statement(Node *node, char **output, int *output_length,
                     int *current_output_position) {
 
@@ -288,13 +340,8 @@ void emit_statement(Node *node, char **output, int *output_length,
     add_to_output(current_output_position, output_length, output,
                   node->body.var_declaration.variable_name);
     add_to_output(current_output_position, output_length, output, "=");
-    if (node->body.var_declaration.variable_type == TOKEN_INT_TYPE) {
-      char buffer[20];
-      snprintf(buffer, sizeof(buffer), "%d",
-               node->body.var_declaration.variable_value->body.int_value.value);
-
-      add_to_output(current_output_position, output_length, output, buffer);
-    }
+    emit_expression(node->body.var_declaration.variable_value, output,
+                    output_length, current_output_position);
     add_to_output(current_output_position, output_length, output, ";");
   } else if (node->body.var_declaration.variable_type == TOKEN_STRING_TYPE) {
     add_to_output(current_output_position, output_length, output,
@@ -340,6 +387,23 @@ void emit_statement(Node *node, char **output, int *output_length,
                current_output_position);
 
     add_to_output(current_output_position, output_length, output, "}");
+  } else if (node->type == NODE_RETURN_STATEMENT) {
+    add_to_output(current_output_position, output_length, output, "return ");
+    emit_expression(node->body.return_statement.expression, output,
+                    output_length, current_output_position);
+    add_to_output(current_output_position, output_length, output, ";");
+  } else if (node->type == NODE_FUNCTION_CALL) {
+    add_to_output(current_output_position, output_length, output,
+                  node->body.function_call.name);
+    add_to_output(current_output_position, output_length, output, "(");
+    for (int i = 0; i < node->body.function_call.argument_count; i++) {
+      emit_expression(node->body.function_call.arguments[i], output,
+                      output_length, current_output_position);
+      if (i < node->body.function_call.argument_count - 1) {
+        add_to_output(current_output_position, output_length, output, ", ");
+      }
+    }
+    add_to_output(current_output_position, output_length, output, ");");
   }
 }
 
@@ -355,13 +419,23 @@ void emit_program(Node *node, char **output, int *output_length,
   if (node->type == NODE_PROGRAM) {
     add_to_output(current_output_position, output_length, output,
                   "#include <stdlib.h> \n\
-                   #include <stdio.h> \n\
-                   int main() {");
+                   #include <stdio.h> \n");
 
-    // For each statement in Program
     for (int i = 0; i < node->body.program.statement_count; i++) {
-      emit_statement(node->body.program.statements[i], output, output_length,
-                     current_output_position);
+      if (node->body.program.statements[i]->type == NODE_FUNCTION) {
+        emit_function(node->body.program.statements[i], output, output_length,
+                      current_output_position);
+      }
+    }
+
+    add_to_output(current_output_position, output_length, output,
+                  "int main() {");
+
+    for (int i = 0; i < node->body.program.statement_count; i++) {
+      if (node->body.program.statements[i]->type != NODE_FUNCTION) {
+        emit_statement(node->body.program.statements[i], output, output_length,
+                       current_output_position);
+      }
     }
 
     add_to_output(current_output_position, output_length, output, "return 0;}");
@@ -369,13 +443,11 @@ void emit_program(Node *node, char **output, int *output_length,
 }
 
 int main() {
-  char *str = "int a = 2; \
-               if (a < 3) {\
-                 int x = 5; \
-                 x = 10;  \
-                 print(x); \
-               } \
-               \n";
+  char *str = "func int function_name(int a, int b) { \
+                   return a + b; \
+                } \
+                int result = function_name(2, 3); \
+                print(result);\n";
   int output_length = 30;
   int current_output_position = 0;
   char *output = (char *)malloc((output_length + 1) * sizeof(char));

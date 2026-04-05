@@ -201,6 +201,11 @@ TokenType analyze_expression(Node *node) {
     }
     return TOKEN_INT_TYPE;
   }
+  case NODE_FUNCTION_CALL:
+    for (int i = 0; i < node->body.function_call.argument_count; i++) {
+      analyze_expression(node->body.function_call.arguments[i]);
+    }
+    return TOKEN_INT_TYPE;
   default:
     printf("Semantic error: Unsupported node type in expression analysis\n");
     exit(1);
@@ -269,6 +274,29 @@ void analyze_node(Node *node) {
   case NODE_FOR_LOOP:
     TokenType for_loop_initiializer =
         analyze_expression(node->body.for_loop.initializer);
+
+  case NODE_FUNCTION: {
+    enter_scope();
+    for (int i = 0; i < node->body.function.param_count; i++) {
+      insert_variable(node->body.function.params[i].name,
+                      node->body.function.params[i].type);
+    }
+    for (int i = 0; i < node->body.function.statement_count; i++) {
+      analyze_node(node->body.function.statements[i]);
+    }
+    exit_scope();
+    break;
+  }
+
+  case NODE_RETURN_STATEMENT:
+    analyze_expression(node->body.return_statement.expression);
+    break;
+
+  case NODE_FUNCTION_CALL:
+    for (int i = 0; i < node->body.function_call.argument_count; i++) {
+      analyze_expression(node->body.function_call.arguments[i]);
+    }
+    break;
 
   case NODE_PRINT:
     analyze_expression(node->body.print.print_value);

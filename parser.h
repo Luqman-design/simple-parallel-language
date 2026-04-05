@@ -11,6 +11,8 @@ typedef enum {
   NODE_PRINT,
   NODE_FOR_LOOP,
   NODE_FUNCTION,
+  NODE_RETURN_STATEMENT,
+  NODE_FUNCTION_CALL,
   NODE_BINARY_OPERATION,
   NODE_UNARY_OPERATION,
   NODE_INT_VALUE,
@@ -51,8 +53,29 @@ typedef struct Node {
       struct Node *body;
     } for_loop;
     struct {
+      TokenType return_type;
+      char *name;
+
+      struct {
+        TokenType type;
+        char *name;
+      } *params;
+      int param_count;
+
+      struct Node **statements;
+      int statement_count;
+    } function;
+    struct {
       struct Node *print_value;
     } print;
+    struct {
+      struct Node *expression;
+    } return_statement;
+    struct {
+      char *name;
+      struct Node **arguments;
+      int argument_count;
+    } function_call;
     struct {
       TokenType operator_type;
       struct Node *left_operand;
