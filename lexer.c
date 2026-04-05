@@ -223,10 +223,11 @@ Token next_token(Lexer *lexer) {
 
     // Other (such as whitespaces)
     else {
-      if (current_character == ' ') {
+      if (current_character == ' ' || current_character == '\t' ||
+          current_character == '\n' || current_character == '\r') {
         lexer->position++;
       } else {
-        printf("Error: %s is an illegal symbol", current_token_buffer);
+        printf("Error: %c is an illegal symbol\n", current_character);
         exit(1);
       }
     }
