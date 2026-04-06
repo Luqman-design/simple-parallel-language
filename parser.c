@@ -16,9 +16,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "parser.h"
-#include "lexer.h"
-#include <stdio.h>
-#include <stdlib.h>
 
 /* Example:
 Input: [TOKEN_INT_TYPE, TOKEN_IDENTIFIER, TOKEN_EQUAL, TOKEN_STRING_VALUE,
@@ -56,7 +53,7 @@ ParameterList ::= ( ("int" | "string") IDENTIFIER ("," ("int" | "string") IDENTI
 
 ReturnStatement ::= "return" expression ";"
 
-FunctionCall ::= IDENTIFIER "(" ArgumentList ")" ";"
+FunctionCall ::= (thread | process)? IDENTIFIER "(" ArgumentList ")" ";"
 
 ArgumentList ::= (expression ("," expression)*)?
 

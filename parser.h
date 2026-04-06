@@ -74,6 +74,13 @@ typedef struct Node {
       struct Node *expression;
     } return_statement;
     struct {
+      /**
+       * Type:
+       * 0 - Regular function call
+       * 1 - Thread function call
+       * 2 - Process function call
+       */
+      int type;
       char *name;
       struct Node **arguments;
       int argument_count;
