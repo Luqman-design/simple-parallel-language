@@ -199,6 +199,8 @@ static Node *parse_statement(Lexer *lexer) {
     return parse_function(lexer);
   } else if (token.type == TOKEN_RETURN) {
     return parse_return_statement(lexer);
+  } else if (token.type == TOKEN_PROCESS) {
+    return parse_function_call(lexer);
   }
 
   fprintf(stderr, "Error: Unexpected token '%s' of type '%d'\n",
@@ -440,6 +442,12 @@ static Node *parse_return_statement(Lexer *lexer) {
 static Node *parse_function_call(Lexer *lexer) {
   Node *node = malloc(sizeof(Node));
   node->type = NODE_FUNCTION_CALL;
+
+  node->body.function_call.type = 0; 
+  if (peek(lexer).type == TOKEN_PROCESS) {
+    node->body.function_call.type = 2; 
+    consume(lexer, TOKEN_PROCESS);
+  }
 
   Token name_token = consume(lexer, TOKEN_IDENTIFIER);
   node->body.function_call.name = name_token.value.string_value;

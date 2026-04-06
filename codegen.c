@@ -414,18 +414,23 @@ void emit_statement(Node *node, char **output, int *output_length,
     emit_expression(node->body.return_statement.expression, output,
                     output_length, current_output_position);
     add_to_output(current_output_position, output_length, output, ";");
-  } else if (node->type == NODE_FUNCTION_CALL) {
-    add_to_output(current_output_position, output_length, output,
-                  node->body.function_call.name);
-    add_to_output(current_output_position, output_length, output, "(");
-    for (int i = 0; i < node->body.function_call.argument_count; i++) {
-      emit_expression(node->body.function_call.arguments[i], output,
-                      output_length, current_output_position);
-      if (i < node->body.function_call.argument_count - 1) {
-        add_to_output(current_output_position, output_length, output, ", ");
-      }
-    }
-    add_to_output(current_output_position, output_length, output, ");");
+   } else if (node->type == NODE_FUNCTION_CALL) {
+     if (node->body.function_call.type == 2) {
+       printf("abc");
+     } else {
+       printf("def");
+       add_to_output(current_output_position, output_length, output,
+                     node->body.function_call.name);
+       add_to_output(current_output_position, output_length, output, "(");
+       for (int i = 0; i < node->body.function_call.argument_count; i++) {
+         emit_expression(node->body.function_call.arguments[i], output,
+                       output_length, current_output_position);
+         if (i < node->body.function_call.argument_count - 1) {
+           add_to_output(current_output_position, output_length, output, ", ");
+         }
+       }
+       add_to_output(current_output_position, output_length, output, ");");
+     }
   }
 }
 
@@ -470,7 +475,7 @@ int main() {
                     print(i); \
                   } \
                 }\
-                func_name(4);\n";
+                process func_name(4);\n";
   int output_length = 30;
   int current_output_position = 0;
   char *output = (char *)malloc((output_length + 1) * sizeof(char));
