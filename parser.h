@@ -2,6 +2,11 @@
 #define PARSER_H
 #include "lexer.h"
 
+typedef struct {
+  TokenType type;
+  char *name;
+} FunctionParam;
+
 typedef enum {
   NODE_PROGRAM,
   NODE_BLOCK,
@@ -56,10 +61,7 @@ typedef struct Node {
       TokenType return_type;
       char *name;
 
-      struct {
-        TokenType type;
-        char *name;
-      } *params;
+      FunctionParam *params;
       int param_count;
 
       struct Node **statements;

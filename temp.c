@@ -1,3 +1,3 @@
 #include <stdlib.h> 
                    #include <stdio.h> 
-int main() {for (int i=0; (i<5); i+=1) {printf("%d", i);}return 0;}
+int func_name(int a) {for (int i=0; (i<5); i+=1) {printf("%d", i);}}int main() {func_name(4);return 0;}

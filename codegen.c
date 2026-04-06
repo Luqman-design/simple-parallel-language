@@ -465,9 +465,12 @@ void emit_program(Node *node, char **output, int *output_length,
 }
 
 int main() {
-  char *str = "for (int i = 0; i < 5; i += 1) { \
-                   print(i); \
-               }\n";
+  char *str = "func int func_name(int a) {\
+                  for (int i = 0; i < 5; i += 1) { \
+                    print(i); \
+                  } \
+                }\
+                func_name(4);\n";
   int output_length = 30;
   int current_output_position = 0;
   char *output = (char *)malloc((output_length + 1) * sizeof(char));

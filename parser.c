@@ -12,6 +12,9 @@
  * - Parenthesized expressions
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "parser.h"
 #include "lexer.h"
 #include <stdio.h>
@@ -372,7 +375,7 @@ static Node *parse_function(Lexer *lexer) {
 
   int param_count = 0;
   int param_capacity = 4;
-  typeof(*node->body.function.params) *params = malloc(sizeof(*params) * param_capacity);
+  FunctionParam *params = malloc(sizeof(*params) * param_capacity);
 
   while (peek(lexer).type != TOKEN_RIGHT_PAREN) {
     if (param_count >= param_capacity) {
