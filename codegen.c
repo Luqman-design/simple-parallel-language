@@ -62,6 +62,9 @@ function codegen {
 void emit_statement(Node *node, char **output, int *output_length,
                     int *current_output_position);
 
+void emit_expression(Node *node, char **output, int *output_length,
+                     int *current_output_position);
+
 void emit_function(Node *node, char **output, int *output_length,
                    int *current_output_position);
 
@@ -81,6 +84,35 @@ void add_to_output(int *current_output_position, int *output_length,
 
   strcpy(*output + *current_output_position, string_to_add);
   *current_output_position += strlen(string_to_add);
+}
+
+// Note: Remember to add semicolon at the caller.
+void emit_function_call(Node *node, char **output, int *output_length,
+                        int *current_output_position) {
+  // TODO: check function_call.type
+  // Example:
+  if (node->body.function_call.type == 2) {
+  } // Add prefix code for processes.
+  // Do the same with suffix code.
+
+  // Function name
+  add_to_output(current_output_position, output_length, output,
+                node->body.function_call.name);
+
+  // (
+  add_to_output(current_output_position, output_length, output, "(");
+
+  // Arguments
+  for (int i = 0; i < node->body.function_call.argument_count; i++) {
+    emit_expression(node->body.function_call.arguments[i], output,
+                    output_length, current_output_position);
+    if (i < node->body.function_call.argument_count - 1) {
+      add_to_output(current_output_position, output_length, output, ", ");
+    }
+  }
+
+  // )
+  add_to_output(current_output_position, output_length, output, ")");
 }
 
 void emit_expression(Node *node, char **output, int *output_length,
@@ -114,17 +146,7 @@ void emit_expression(Node *node, char **output, int *output_length,
     break;
 
   case NODE_FUNCTION_CALL:
-    add_to_output(current_output_position, output_length, output,
-                  node->body.function_call.name);
-    add_to_output(current_output_position, output_length, output, "(");
-    for (int i = 0; i < node->body.function_call.argument_count; i++) {
-      emit_expression(node->body.function_call.arguments[i], output,
-                      output_length, current_output_position);
-      if (i < node->body.function_call.argument_count - 1) {
-        add_to_output(current_output_position, output_length, output, ", ");
-      }
-    }
-    add_to_output(current_output_position, output_length, output, ")");
+    emit_function_call(node, output, output_length, current_output_position);
     break;
 
   default:
@@ -414,22 +436,8 @@ void emit_statement(Node *node, char **output, int *output_length,
                     output_length, current_output_position);
     add_to_output(current_output_position, output_length, output, ";");
   } else if (node->type == NODE_FUNCTION_CALL) {
-    if (node->body.function_call.type == 2) {
-      printf("abc");
-    } else {
-      printf("def");
-      add_to_output(current_output_position, output_length, output,
-                    node->body.function_call.name);
-      add_to_output(current_output_position, output_length, output, "(");
-      for (int i = 0; i < node->body.function_call.argument_count; i++) {
-        emit_expression(node->body.function_call.arguments[i], output,
-                        output_length, current_output_position);
-        if (i < node->body.function_call.argument_count - 1) {
-          add_to_output(current_output_position, output_length, output, ", ");
-        }
-      }
-      add_to_output(current_output_position, output_length, output, ");");
-    }
+    emit_function_call(node, output, output_length, current_output_position);
+    add_to_output(current_output_position, output_length, output, ";");
   }
 }
 
