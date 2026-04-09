@@ -501,7 +501,6 @@ int main() {
 
   free(output);
 
-  system("gcc temp.c -o temp.exe");
 #if defined(_WIN32)
   system("gcc temp.c -o temp.exe");
   system("temp.exe");
