@@ -69,9 +69,10 @@ IfStatement ::= "if" "(" expression ")" "{" statement* "}"
 
 Print ::= "print" "(" expression ")" ";"
 
-VarDeclaration ::= ("int" | "string") IDENTIFIER "=" expression ";"
+VarDeclaration ::= ("int" | "string") IDENTIFIER "=" expression | CallExpression
+";"
 
-VarUpdate ::= IDENTIFIER ("+" | "-")? "=" expression ";"
+VarUpdate ::= IDENTIFIER ("+" | "-")? "=" expression | CallExpression ";"
 
 ForLoop ::= "for" "(" VarDeclaration ";" expression ";" expression ")" "{"
 statement*
