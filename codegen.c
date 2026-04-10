@@ -89,15 +89,16 @@ void add_to_output(int *current_output_position, int *output_length,
 // Note: Remember to add semicolon at the caller.
 void emit_function_call(Node *node, char **output, int *output_length,
                         int *current_output_position) {
-  // TODO: check function_call.type
-  // Example:
-  if (node->body.function_call.type == 2) {
-  } // Add prefix code for processes.
-  // Do the same with suffix code.
+  char *function_name = node->body.function_call.name;
+
+  if (node->body.function_call.type == 2) { // process
+    char buffer[500];
+    snprintf(buffer, sizeof(buffer), "if(fork()==0){");
+    add_to_output(current_output_position, output_length, output, buffer);
+  }
 
   // Function name
-  add_to_output(current_output_position, output_length, output,
-                node->body.function_call.name);
+  add_to_output(current_output_position, output_length, output, function_name);
 
   // (
   add_to_output(current_output_position, output_length, output, "(");
@@ -113,6 +114,12 @@ void emit_function_call(Node *node, char **output, int *output_length,
 
   // )
   add_to_output(current_output_position, output_length, output, ")");
+
+  if (node->body.function_call.type == 2) { // process
+    char buffer[500];
+    snprintf(buffer, sizeof(buffer), ";fflush(stdout);_exit(0);}");
+    add_to_output(current_output_position, output_length, output, buffer);
+  }
 }
 
 void emit_expression(Node *node, char **output, int *output_length,
@@ -359,7 +366,7 @@ void emit_statement(Node *node, char **output, int *output_length,
     VariableEntry *var = lookup_variable(node->body.var_declaration.variable_name);
     if (var && var->is_shared) {
       char buffer[100];
-      snprintf(buffer, sizeof(buffer), "pthread_mutex_t lock_%s;\n", var->name);
+      snprintf(buffer, sizeof(buffer), "pthread_mutex_init(&lock_%s, NULL);", var->name);
       add_to_output(current_output_position, output_length, output, buffer);
     }
     if (node->body.var_declaration.variable_type == TOKEN_INT_TYPE) {
@@ -387,7 +394,7 @@ void emit_statement(Node *node, char **output, int *output_length,
       add_to_output(current_output_position, output_length, output, buffer);
     }
 
-    add_to_output(current_output_position, output_length, output,
+    add_to_output(current_output_position, output_length, output, 
                   node->body.var_update.variable_name);
 
     switch (node->body.var_update._operator) {
@@ -480,7 +487,8 @@ void emit_program(Node *node, char **output, int *output_length,
     add_to_output(current_output_position, output_length, output,
                   "#include <stdlib.h> \n\
                    #include <stdio.h> \n\
-                   #include <pthread.h> \n");
+                   #include <pthread.h> \n\
+                   #include <unistd.h>\n");
 
     for (int i = 0; i < node->body.program.statement_count; i++) {
       if (node->body.program.statements[i]->type == NODE_FUNCTION) {
@@ -491,18 +499,6 @@ void emit_program(Node *node, char **output, int *output_length,
 
     add_to_output(current_output_position, output_length, output,
                   "int main() {\n");
-
-    // Initialize mutexes for shared variables
-    for (int i = 0; i <= scope_top; i++) {
-      VariableEntry *current, *tmp;
-      HASH_ITER(hh, scopes[i], current, tmp) {
-        if (current->is_shared) {
-          char buffer[100];
-          snprintf(buffer, sizeof(buffer), "pthread_mutex_init(&lock_%s, NULL);\n", current->name);
-          add_to_output(current_output_position, output_length, output, buffer);
-        }
-      }
-    }
 
     for (int i = 0; i < node->body.program.statement_count; i++) {
       if (node->body.program.statements[i]->type != NODE_FUNCTION) {
@@ -515,13 +511,32 @@ void emit_program(Node *node, char **output, int *output_length,
   }
 }
 
+void emit_thread(Node *node, char **output, int *output_length,
+                 int *current_output_position) {
+  add_to_output(current_output_position, output_length, output, 
+                "void* ");
+  add_to_output(current_output_position, output_length, output,
+                node->body.thread.name);
+  add_to_output(current_output_position, output_length, output, 
+                "(void* arg) {");
+
+  for (int i = 0; i < node->body.thread.statement_count; i++) {
+    emit_statement(node->body.thread.statements[i], output, output_length,
+                   current_output_position);
+  }
+  
+  add_to_output(current_output_position, output_length, output, 
+                "return NULL;}");
+}
+
 int main() {
-  char *str = "func int func_name(int a) {\
-                  for (int i = 0; i < 5; i += 1) { \
-                    print(i); \
-                  } \
-                }\
-                process func_name(4);\n"; 
+  char *str = "int x = 5; \
+              int b = 2; \
+              if (1) { \
+              x = 10; \
+              b += 2; \
+              x += 1; \
+              }"; 
   int output_length = 30;
   int current_output_position = 0;
   char *output = (char *)malloc((output_length + 1) * sizeof(char));

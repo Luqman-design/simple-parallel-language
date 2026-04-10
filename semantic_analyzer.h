@@ -18,9 +18,6 @@ typedef struct {
   UT_hash_handle hh;
 } VariableEntry;
 
-extern VariableEntry *scopes[MAX_SCOPE];
-extern int scope_top;
-
 VariableEntry *lookup_variable(const char *name);
 void semantic_analyze(Node *node);
 

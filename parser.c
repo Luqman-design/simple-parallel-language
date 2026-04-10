@@ -12,10 +12,10 @@
  * - Parenthesized expressions
  */
 
+#include "parser.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "parser.h"
 
 /* Example:
 Input: [TOKEN_INT_TYPE, TOKEN_IDENTIFIER, TOKEN_EQUAL, TOKEN_STRING_VALUE,
@@ -45,15 +45,21 @@ Program(
 /* Grammar:
 Program ::= statement*
 
-statement ::= IfStatement | Print | VarDeclaration | ForLoop | VarUpdate | Function | FunctionCall | ReturnStatement
+statement ::= IfStatement | Print | VarDeclaration | ForLoop | VarUpdate |
+Function | FunctionCall | ReturnStatement
 
-Function ::= "func" ("int" | "string") IDENTIFIER "(" ParameterList ")" "{" statement* ReturnStatement "}"
+Function ::= "func" ("int" | "string") IDENTIFIER "(" ParameterList ")" "{"
+statement* ReturnStatement "}"
 
-ParameterList ::= ( ("int" | "string") IDENTIFIER ("," ("int" | "string") IDENTIFIER)* )?
+ParameterList ::= ( ("int" | "string") IDENTIFIER ("," ("int" | "string")
+IDENTIFIER)* )?
 
 ReturnStatement ::= "return" expression ";"
 
-FunctionCall ::= (thread | process)? IDENTIFIER "(" ArgumentList ")" ";"
+CallExpression ::= (thread | process)? IDENTIFIER "(" ArgumentList ")"
+FunctionCall    ::= CallExpression ";"
+AwaitStatement ::= "await" "{" (IDENTIFIER ";")* "}" // Note: IDENTIFIER should
+only work for function names.
 
 ArgumentList ::= (expression ("," expression)*)?
 
@@ -63,9 +69,10 @@ IfStatement ::= "if" "(" expression ")" "{" statement* "}"
 
 Print ::= "print" "(" expression ")" ";"
 
-VarDeclaration ::= ("int" | "string") IDENTIFIER "=" expression ";"
+VarDeclaration ::= ("int" | "string") IDENTIFIER "=" expression | CallExpression
+";"
 
-VarUpdate ::= IDENTIFIER ("+" | "-")? "=" expression ";"
+VarUpdate ::= IDENTIFIER ("+" | "-")? "=" expression | CallExpression ";"
 
 ForLoop ::= "for" "(" VarDeclaration ";" expression ";" expression ")" "{"
 statement*
@@ -81,7 +88,8 @@ factor ::= unary (("*" | "/") unary)*
 
 unary ::= "!" unary | primary
 
-primary ::= TOKEN_INT_VALUE | TOKEN_STRING_VALUE | IDENTIFIER | "(" expression ")"
+primary ::= TOKEN_INT_VALUE | TOKEN_STRING_VALUE | IDENTIFIER | "(" expression
+")"
  */
 
 /**
@@ -443,9 +451,9 @@ static Node *parse_function_call(Lexer *lexer) {
   Node *node = malloc(sizeof(Node));
   node->type = NODE_FUNCTION_CALL;
 
-  node->body.function_call.type = 0; 
+  node->body.function_call.type = 0;
   if (peek(lexer).type == TOKEN_PROCESS) {
-    node->body.function_call.type = 2; 
+    node->body.function_call.type = 2;
     consume(lexer, TOKEN_PROCESS);
   }
 
@@ -715,4 +723,22 @@ static Node *parse_primary(Lexer *lexer) {
   // Unexpected token
   fprintf(stderr, "Parser error: Unexpected token\n");
   exit(1);
+}
+
+static Node *parse_thread(Lexer *lexer) {
+  Node *node = malloc(sizeof(Node));
+  node->type = NODE_THREAD;
+  
+  consume(lexer, TOKEN_THREAD);
+  
+  Token name_token = consume(lexer, TOKEN_IDENTIFIER);
+  node->body.thread.name = name_token.value.string_value;
+  
+  consume(lexer, TOKEN_LEFT_PAREN);
+  consume(lexer, TOKEN_RIGHT_PAREN);  
+  
+  consume(lexer, TOKEN_LEFT_CURLYBRACKET);
+  consume(lexer, TOKEN_RIGHT_CURLYBRACKET);
+  
+  return node;
 }
