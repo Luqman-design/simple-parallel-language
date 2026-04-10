@@ -91,7 +91,7 @@ void emit_function_call(Node *node, char **output, int *output_length,
                         int *current_output_position) {
   char *function_name = node->body.function_call.name;
 
-  if (node->body.function_call.type == 2) { // process (fire-and-forget)
+  if (node->body.function_call.type == 2) { // process
     char buffer[500];
     snprintf(buffer, sizeof(buffer), "if(fork()==0){");
     add_to_output(current_output_position, output_length, output, buffer);
@@ -115,7 +115,7 @@ void emit_function_call(Node *node, char **output, int *output_length,
   // )
   add_to_output(current_output_position, output_length, output, ")");
 
-  if (node->body.function_call.type == 2) { // process (fire-and-forget)
+  if (node->body.function_call.type == 2) { // process
     char buffer[500];
     snprintf(buffer, sizeof(buffer), ";_exit(0);}");
     add_to_output(current_output_position, output_length, output, buffer);
@@ -300,17 +300,17 @@ void emit_function(Node *node, char **output, int *output_length,
     }
   }
 
-  add_to_output(current_output_position, output_length, output, 
-    
-  ") {\n pthread_mutex_lock(&global_lock);\n");
+  add_to_output(current_output_position, output_length, output,
+
+                ") {\n pthread_mutex_lock(&global_lock);\n");
 
   for (int i = 0; i < node->body.function.statement_count; i++) {
     emit_statement(node->body.function.statements[i], output, output_length,
                    current_output_position);
   }
 
-  add_to_output(current_output_position, output_length, output, 
-  "pthread_mutex_unlock(&global_lock);\n}\n");
+  add_to_output(current_output_position, output_length, output,
+                "pthread_mutex_unlock(&global_lock);\n}\n");
 }
 
 void emit_statement(Node *node, char **output, int *output_length,
