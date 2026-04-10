@@ -482,6 +482,24 @@ void emit_program(Node *node, char **output, int *output_length,
   }
 }
 
+void emit_thread(Node *node, char **output, int *output_length,
+                 int *current_output_position) {
+  add_to_output(current_output_position, output_length, output, 
+                "void* ");
+  add_to_output(current_output_position, output_length, output,
+                node->body.thread.name);
+  add_to_output(current_output_position, output_length, output, 
+                "(void* arg) {");
+
+  for (int i = 0; i < node->body.thread.statement_count; i++) {
+    emit_statement(node->body.thread.statements[i], output, output_length,
+                   current_output_position);
+  }
+  
+  add_to_output(current_output_position, output_length, output, 
+                "return NULL;}");
+}
+
 int main() {
   char *str = "func int func_name(int a) {\
                   for (int i = 0; i < 5; i += 1) { \

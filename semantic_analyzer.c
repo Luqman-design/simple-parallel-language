@@ -312,6 +312,15 @@ void analyze_node(Node *node) {
   default:
     printf("Semantic error: Unsupported node type in semantic analysis\n");
     exit(1);
+
+  case NODE_THREAD: {
+    enter_scope();
+    for (int i = 0; i < node->body.thread.statement_count; i++) {
+      analyze_node(node->body.thread.statements[i]);
+    }
+    exit_scope();
+    break;
+    } 
   }
 }
 

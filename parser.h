@@ -23,6 +23,7 @@ typedef enum {
   NODE_INT_VALUE,
   NODE_STRING_VALUE,
   NODE_IDENTIFIER,
+  NODE_THREAD,
 } NodeType;
 
 typedef struct Node {
@@ -104,6 +105,11 @@ typedef struct Node {
       TokenType type; // Assigned at semantic analysis
       char *name;
     } identifier;
+    struct {
+      char *name;
+      struct Node **statements;
+      int statement_count;
+    } thread;
   } body;
 } Node;
 

@@ -716,3 +716,21 @@ static Node *parse_primary(Lexer *lexer) {
   fprintf(stderr, "Parser error: Unexpected token\n");
   exit(1);
 }
+
+static Node *parse_thread(Lexer *lexer) {
+  Node *node = malloc(sizeof(Node));
+  node->type = NODE_THREAD;
+  
+  consume(lexer, TOKEN_THREAD);
+  
+  Token name_token = consume(lexer, TOKEN_IDENTIFIER);
+  node->body.thread.name = name_token.value.string_value;
+  
+  consume(lexer, TOKEN_LEFT_PAREN);
+  consume(lexer, TOKEN_RIGHT_PAREN);  
+  
+  consume(lexer, TOKEN_LEFT_CURLYBRACKET);
+  consume(lexer, TOKEN_RIGHT_CURLYBRACKET);
+  
+  return node;
+}
