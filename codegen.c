@@ -117,7 +117,7 @@ void emit_function_call(Node *node, char **output, int *output_length,
 
   if (node->body.function_call.type == 2) { // process
     char buffer[500];
-    snprintf(buffer, sizeof(buffer), ";_exit(0);}");
+    snprintf(buffer, sizeof(buffer), ";fflush(stdout);_exit(0);}");
     add_to_output(current_output_position, output_length, output, buffer);
   }
 }
@@ -465,6 +465,7 @@ void emit_program(Node *node, char **output, int *output_length,
                   "#include <stdlib.h> \n\
                    #include <stdio.h> \n\
                    #include <pthread.h> \n\
+                   #include <unistd.h>\n \
                    pthread_mutex_t global_lock; \n");
 
     for (int i = 0; i < node->body.program.statement_count; i++) {
