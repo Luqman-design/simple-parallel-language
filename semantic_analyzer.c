@@ -64,11 +64,12 @@ steps:
 VariableEntry *scopes[MAX_SCOPE];
 int scope_top = -1;
 
+int current_thread_id = 0;
+int next_thread_id = 1;
+
 void enter_scope();
 void exit_scope();
-void insert_variable(const char *name, TokenType type);
 VariableEntry *lookup_variable(const char *name);
-void increment_variable_usage(const char *name);
 void check_operators(Node *node, char *error_message);
 void check_equality_operators(Node *node, char *error_message);
 TokenType analyze_binary_operation(Node *node);
@@ -91,22 +92,21 @@ void exit_scope() {
   scope_top--;
 }
 
-void insert_variable(const char *name, TokenType type) {
-  VariableEntry *variable;
-  HASH_FIND_STR(scopes[scope_top], name, variable);
+void register_variable_usage(const char *name) {
+  VariableEntry *var = lookup_variable(name);
 
-  if (variable != NULL) {
-    printf("Semantic error: Variable %s is already declared\n", name);
-    exit(1);
+  if (!var) return;
+
+  for (int i = 0; i < var->thread_count; i++) {
+    if (var->threads[i] == current_thread_id)
+      return;
   }
 
-  variable = malloc(sizeof(VariableEntry));
-  strcpy(variable->name, name);
-  variable->type = type;
-  variable->usage_count = 0;
-  variable->is_shared = 0;
+  var->threads[var->thread_count++] = current_thread_id;
 
-  HASH_ADD_STR(scopes[scope_top], name, variable);
+  if (var->thread_count > 1) {
+    var->is_shared = 1;
+  }
 }
 
 VariableEntry *lookup_variable(const char *name) {
@@ -120,17 +120,6 @@ VariableEntry *lookup_variable(const char *name) {
   }
 
   return NULL;
-}
-
-void increment_variable_usage(const char *name) {
-  VariableEntry *variable = lookup_variable(name);
-  
-  if (variable != NULL) {
-    variable->usage_count++;
-    if (variable->usage_count > 1) {
-      variable->is_shared = 1;
-    }
-  }
 }
 
 void check_operators(Node *node, char *error_message) {
@@ -197,13 +186,14 @@ TokenType analyze_expression(Node *node) {
     return TOKEN_STRING_TYPE;
   case NODE_IDENTIFIER: {
     VariableEntry *variable = lookup_variable(node->body.identifier.name);
+    char *variable_name = node->body.identifier.name;
     if (variable == NULL) {
       printf("Semantic error: Variable %s is not declared\n",
-             node->body.identifier.name);
+             variable_name);
       exit(1);
     }
     node->body.identifier.type = variable->type;
-    increment_variable_usage(node->body.identifier.name);
+    register_variable_usage(variable_name);
 
     return variable->type;
   }
@@ -256,7 +246,7 @@ void analyze_node(Node *node) {
              variable_name);
       exit(1);
     }
-    insert_variable(variable_name, variable_type); 
+    register_variable_usage(variable_name);
     break;
   }
   case NODE_VAR_UPDATE: {
@@ -333,11 +323,16 @@ void analyze_node(Node *node) {
     exit(1);
 
   case NODE_THREAD: {
+    int old_thread_id = current_thread_id; // gemmer den gamle thread id
+    current_thread_id = next_thread_id++; 
+
     enter_scope();
     for (int i = 0; i < node->body.thread.statement_count; i++) {
       analyze_node(node->body.thread.statements[i]);
     }
     exit_scope();
+
+    current_thread_id = old_thread_id; // gendanner den gamle thread id
     break;
     } 
   }

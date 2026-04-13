@@ -489,6 +489,7 @@ void emit_program(Node *node, char **output, int *output_length,
                    #include <stdio.h> \n\
                    #include <pthread.h> \n\
                    #include <unistd.h>\n");
+                   
 
     for (int i = 0; i < node->body.program.statement_count; i++) {
       if (node->body.program.statements[i]->type == NODE_FUNCTION) {
