@@ -471,7 +471,14 @@ void emit_statement(Node *node, char **output, int *output_length,
   } else if (node->type == NODE_FUNCTION_CALL) {
     emit_function_call(node, output, output_length, current_output_position);
     add_to_output(current_output_position, output_length, output, ";");
-  }
+  //MADS B
+  } else if (node->type == NODE_AWAIT) {
+  add_to_output(current_output_position, output_length, output, "result = ");
+  add_to_output(current_output_position, output_length, output, node->body.thread.name);
+  add_to_output(current_output_position, output_length, output, "();\n");
+  emit_statement(pthread_join(node->body.thread.name, NULL));
+}
+  //MADS E
 }
 
 void emit_program(Node *node, char **output, int *output_length,

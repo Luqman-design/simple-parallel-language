@@ -24,6 +24,9 @@ typedef enum {
   NODE_STRING_VALUE,
   NODE_IDENTIFIER,
   NODE_THREAD,
+  //MADS B
+  NODE_AWAIT,
+  //MADS E
 } NodeType;
 
 typedef struct Node {

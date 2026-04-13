@@ -191,7 +191,7 @@ Token next_token(Lexer *lexer) {
       } else if (strcmp(current_token_buffer, "return") == 0) {
         token.type = TOKEN_RETURN;
       } else if (strcmp(current_token_buffer, "await") == 0) {
-        token.type = TOKEN_RETURN;
+        token.type = TOKEN_AWAIT;
       } else if (strcmp(current_token_buffer, "thread") == 0) {
         token.type = TOKEN_THREAD;
       }
