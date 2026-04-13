@@ -41,11 +41,13 @@ typedef struct Node {
       TokenType variable_type;
       char *variable_name;
       struct Node *variable_value;
+      int is_shared;
     } var_declaration;
     struct {
       char *variable_name;
       TokenType _operator;
       struct Node *value;
+      int is_shared;
     } var_update;
     struct {
       struct Node *condition;

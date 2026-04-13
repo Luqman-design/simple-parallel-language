@@ -76,12 +76,14 @@ TokenType analyze_binary_operation(Node *node);
 TokenType analyze_expression(Node *node);
 void analyze_node(Node *node);
 
-void enter_scope() {
+void enter_scope()
+{
   scope_top++;
   scopes[scope_top] = NULL;
 }
 
-void exit_scope() {
+void exit_scope()
+{
   VariableEntry *current, *tmp;
 
   HASH_ITER(hh, scopes[scope_top], current, tmp) {
@@ -92,28 +94,35 @@ void exit_scope() {
   scope_top--;
 }
 
-void register_variable_usage(const char *name) {
+void register_variable_usage(const char *name)
+{
   VariableEntry *var = lookup_variable(name);
 
-  if (!var) return;
+  if (!var)
+    return;
 
-  for (int i = 0; i < var->thread_count; i++) {
+  for (int i = 0; i < var->thread_count; i++)
+  {
     if (var->threads[i] == current_thread_id)
       return;
   }
 
-  var->threads[var->thread_count++] = current_thread_id;
+  var->threads[var->thread_count] = current_thread_id;
+  var->thread_count++;
 
-  if (var->thread_count > 1) {
+  if (var->thread_count > 1)
+  {
     var->is_shared = 1;
   }
 }
 
-void insert_variable(const char *name, TokenType type) {
+void insert_variable(const char *name, TokenType type)
+{
   VariableEntry *variable;
   HASH_FIND_STR(scopes[scope_top], name, variable);
 
-  if (variable != NULL) {
+  if (variable != NULL)
+  {
     printf("Semantic error: Variable %s is already declared\n", name);
     exit(1);
   }
@@ -121,17 +130,21 @@ void insert_variable(const char *name, TokenType type) {
   variable = malloc(sizeof(VariableEntry));
   strcpy(variable->name, name);
   variable->type = type;
+  variable->thread_count = 0;
   variable->is_shared = 0;
 
   HASH_ADD_STR(scopes[scope_top], name, variable);
 }
 
-VariableEntry *lookup_variable(const char *name) {
+VariableEntry *lookup_variable(const char *name)
+{
   // Loops through each scope, starting from the leaf/top (most nested scope)
-  for (int i = scope_top; i >= 0; i--) {
+  for (int i = scope_top; i >= 0; i--)
+  {
     VariableEntry *variable;
     HASH_FIND_STR(scopes[i], name, variable);
-    if (variable) {
+    if (variable)
+    {
       return variable;
     }
   }
@@ -139,34 +152,40 @@ VariableEntry *lookup_variable(const char *name) {
   return NULL;
 }
 
-void check_operators(Node *node, char *error_message) {
+void check_operators(Node *node, char *error_message)
+{
   TokenType left_operand =
       analyze_expression(node->body.binary_operation.left_operand);
   TokenType right_operand =
       analyze_expression(node->body.binary_operation.right_operand);
 
   if (left_operand != TOKEN_INT_TYPE ||
-      right_operand != TOKEN_INT_TYPE) { 
+      right_operand != TOKEN_INT_TYPE)
+  {
     printf("%s", error_message);
     exit(1);
   }
 }
 
-void check_equality_operators(Node *node, char *error_message) {
+void check_equality_operators(Node *node, char *error_message)
+{
   TokenType left_operand =
       analyze_expression(node->body.binary_operation.left_operand);
   TokenType right_operand =
       analyze_expression(node->body.binary_operation.right_operand);
 
-  if (left_operand != right_operand) { 
+  if (left_operand != right_operand)
+  {
     printf("%s", error_message);
     exit(1);
   }
 }
 
-TokenType analyze_binary_operation(Node *node) {
+TokenType analyze_binary_operation(Node *node)
+{
 
-  switch (node->body.binary_operation.operator_type) {
+  switch (node->body.binary_operation.operator_type)
+  {
   case TOKEN_PLUS:
   case TOKEN_MINUS:
   case TOKEN_MULTIPLY:
@@ -195,16 +214,20 @@ TokenType analyze_binary_operation(Node *node) {
   return TOKEN_INT_TYPE;
 }
 
-TokenType analyze_expression(Node *node) {
-  switch (node->type) {
+TokenType analyze_expression(Node *node)
+{
+  switch (node->type)
+  {
   case NODE_INT_VALUE:
     return TOKEN_INT_TYPE;
   case NODE_STRING_VALUE:
     return TOKEN_STRING_TYPE;
-  case NODE_IDENTIFIER: {
+  case NODE_IDENTIFIER:
+  {
     VariableEntry *variable = lookup_variable(node->body.identifier.name);
     char *variable_name = node->body.identifier.name;
-    if (variable == NULL) {
+    if (variable == NULL)
+    {
       printf("Semantic error: Variable %s is not declared\n",
              variable_name);
       exit(1);
@@ -216,17 +239,20 @@ TokenType analyze_expression(Node *node) {
   }
   case NODE_BINARY_OPERATION:
     return analyze_binary_operation(node);
-  case NODE_UNARY_OPERATION: {
+  case NODE_UNARY_OPERATION:
+  {
     TokenType operand_type =
         analyze_expression(node->body.unary_operation.operand);
-    if (operand_type != TOKEN_INT_TYPE) {
+    if (operand_type != TOKEN_INT_TYPE)
+    {
       printf("Semantic error: Unary operator requires an integer operand\n");
       exit(1);
     }
     return TOKEN_INT_TYPE;
   }
   case NODE_FUNCTION_CALL:
-    for (int i = 0; i < node->body.function_call.argument_count; i++) {
+    for (int i = 0; i < node->body.function_call.argument_count; i++)
+    {
       analyze_expression(node->body.function_call.arguments[i]);
     }
     return TOKEN_INT_TYPE;
@@ -236,63 +262,82 @@ TokenType analyze_expression(Node *node) {
   }
 }
 
-void analyze_node(Node *node) {
-  switch (node->type) {
+void analyze_node(Node *node)
+{
+  switch (node->type)
+  {
   case NODE_PROGRAM:
     enter_scope();
-    for (int i = 0; i < node->body.program.statement_count; i++) {
+    for (int i = 0; i < node->body.program.statement_count; i++)
+    {
       analyze_node(node->body.program.statements[i]);
     }
     exit_scope();
     break;
   case NODE_BLOCK:
     enter_scope();
-    for (int i = 0; i < node->body.block.statement_count; i++) {
+    for (int i = 0; i < node->body.block.statement_count; i++)
+    {
       analyze_node(node->body.block.statements[i]);
     }
     exit_scope();
     break;
-  case NODE_VAR_DECLARATION: {
+  case NODE_VAR_DECLARATION:
+  {
     TokenType variable_type = node->body.var_declaration.variable_type;
     char *variable_name = node->body.var_declaration.variable_name;
     TokenType expression_type =
         analyze_expression(node->body.var_declaration.variable_value);
 
-    if (expression_type != variable_type) {
+    if (expression_type != variable_type)
+    {
       printf("Semantic error: Type mismatch in assignment to %s\n",
              variable_name);
       exit(1);
     }
-    insert_variable(variable_name, variable_type); 
+    insert_variable(variable_name, variable_type);
     register_variable_usage(variable_name);
+    VariableEntry *var = lookup_variable(variable_name);
+    if (var) {
+      node->body.var_declaration.is_shared = var->is_shared;
+    }
     break;
   }
-  case NODE_VAR_UPDATE: {
+  case NODE_VAR_UPDATE:
+  {
     TokenType variable_type = analyze_expression(node->body.var_update.value);
     char *variable_name = node->body.var_update.variable_name;
 
     VariableEntry *variable = lookup_variable(variable_name);
 
-    if (variable_type != variable->type) {
+    if (variable_type != variable->type)
+    {
       printf("Semantic error: Type mismatch in variable update on %s\n",
              variable_name);
       exit(1);
     }
     register_variable_usage(variable_name);
+    VariableEntry *var = lookup_variable(variable_name);
+    if (var) {
+        node->body.var_update.is_shared = var->is_shared;
+    }
 
     break;
   }
 
-  case NODE_IF_STATEMENT: {
+  case NODE_IF_STATEMENT:
+  {
     TokenType condition_type =
         analyze_expression(node->body.if_statement.condition);
 
-    if (condition_type != TOKEN_INT_TYPE) {
+    if (condition_type != TOKEN_INT_TYPE)
+    {
       printf("Semantic error: if condition must be integer\n");
       exit(1);
     }
     analyze_node(node->body.if_statement.then_branch);
-    if (node->body.if_statement.else_branch) {
+    if (node->body.if_statement.else_branch)
+    {
       analyze_node(node->body.if_statement.else_branch);
     }
     break;
@@ -302,7 +347,8 @@ void analyze_node(Node *node) {
     analyze_node(node->body.for_loop.initializer);
     TokenType condition_type =
         analyze_expression(node->body.for_loop.condition);
-    if (condition_type != TOKEN_INT_TYPE) {
+    if (condition_type != TOKEN_INT_TYPE)
+    {
       printf("Semantic error: for loop condition must be integer\n");
       exit(1);
     }
@@ -310,13 +356,16 @@ void analyze_node(Node *node) {
     analyze_node(node->body.for_loop.body);
     break;
 
-  case NODE_FUNCTION: {
+  case NODE_FUNCTION:
+  {
     enter_scope();
-    for (int i = 0; i < node->body.function.param_count; i++) {
+    for (int i = 0; i < node->body.function.param_count; i++)
+    {
       insert_variable(node->body.function.params[i].name,
                       node->body.function.params[i].type);
     }
-    for (int i = 0; i < node->body.function.statement_count; i++) {
+    for (int i = 0; i < node->body.function.statement_count; i++)
+    {
       analyze_node(node->body.function.statements[i]);
     }
     exit_scope();
@@ -328,7 +377,8 @@ void analyze_node(Node *node) {
     break;
 
   case NODE_FUNCTION_CALL:
-    for (int i = 0; i < node->body.function_call.argument_count; i++) {
+    for (int i = 0; i < node->body.function_call.argument_count; i++)
+    {
       analyze_expression(node->body.function_call.arguments[i]);
     }
     break;
@@ -340,22 +390,22 @@ void analyze_node(Node *node) {
     printf("Semantic error: Unsupported node type in semantic analysis\n");
     exit(1);
 
-  case NODE_THREAD: {
+  case NODE_THREAD:
+  {
     int old_thread_id = current_thread_id; // gemmer den gamle thread id
-    current_thread_id = next_thread_id++; 
+    current_thread_id = next_thread_id++;
 
     enter_scope();
-    for (int i = 0; i < node->body.thread.statement_count; i++) {
+    for (int i = 0; i < node->body.thread.statement_count; i++)
+    {
       analyze_node(node->body.thread.statements[i]);
     }
     exit_scope();
 
     current_thread_id = old_thread_id; // gendanner den gamle thread id
     break;
-    } 
+  }
   }
 }
 
 void semantic_analyze(Node *root) { analyze_node(root); }
-
-

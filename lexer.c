@@ -192,6 +192,8 @@ Token next_token(Lexer *lexer) {
         token.type = TOKEN_RETURN;
       } else if (strcmp(current_token_buffer, "await") == 0) {
         token.type = TOKEN_RETURN;
+      } else if (strcmp(current_token_buffer, "shared") == 0) {
+        token.type = TOKEN_SHARED;
       } else if (strcmp(current_token_buffer, "thread") == 0) {
         token.type = TOKEN_THREAD;
       }

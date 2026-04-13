@@ -249,13 +249,13 @@ void emit_binary_operation(Node *node, char **output, int *output_length,
              node->body.binary_operation.right_operand->body.int_value.value);
 
     add_to_output(current_output_position, output_length, output, buffer);
-  } else if (node->body.binary_operation.left_operand
+  } else if (node->body.binary_operation.right_operand
                  ->type == // Tilføjet denne, da ("Hej" (==)/(!=) "Hej") er
                            // tilladt
              NODE_STRING_VALUE) {
     add_to_output(
         current_output_position, output_length, output,
-        node->body.binary_operation.left_operand->body.string_value.value);
+        node->body.binary_operation.right_operand->body.string_value.value);
   } else if (node->body.binary_operation.right_operand->type ==
              NODE_IDENTIFIER) {
     // The validity of the types was checked in the semantic analysis.
@@ -363,12 +363,6 @@ void emit_statement(Node *node, char **output, int *output_length,
       add_to_output(current_output_position, output_length, output, ");");
     }
   } else if (node->type == NODE_VAR_DECLARATION) {
-    VariableEntry *var = lookup_variable(node->body.var_declaration.variable_name);
-    if (var && var->is_shared) {
-      char buffer[100];
-      snprintf(buffer, sizeof(buffer), "pthread_mutex_init(&lock_%s, NULL);", var->name);
-      add_to_output(current_output_position, output_length, output, buffer);
-    }
     if (node->body.var_declaration.variable_type == TOKEN_INT_TYPE) {
       add_to_output(current_output_position, output_length, output, "int ");
     } else if (node->body.var_declaration.variable_type == TOKEN_STRING_TYPE) {
@@ -383,14 +377,11 @@ void emit_statement(Node *node, char **output, int *output_length,
     add_to_output(current_output_position, output_length, output, ";");
   } else if (node->type == NODE_VAR_UPDATE) {
 
-    char *name = node->body.var_update.variable_name;
-
-    VariableEntry *var = lookup_variable(name);
-
     // lock the variable if it's shared
-    if (var && var->is_shared) { 
+    if (node->body.var_update.is_shared) {
+      char *variable_name = node->body.var_update.variable_name;
       char buffer[100];
-      snprintf(buffer, sizeof(buffer), "pthread_mutex_lock(&lock_%s);\n", var->name);
+      snprintf(buffer, sizeof(buffer), "pthread_mutex_lock(&lock_%s);\n", variable_name);
       add_to_output(current_output_position, output_length, output, buffer);
     }
 
@@ -420,9 +411,10 @@ void emit_statement(Node *node, char **output, int *output_length,
     add_to_output(current_output_position, output_length, output, ";"); 
 
     // unclock the variable if it's shared after usage
-    if (var && var->is_shared) {
+    if (node->body.var_update.is_shared) {
+      char *variable_name = node->body.var_update.variable_name;
       char buffer[100];
-      snprintf(buffer, sizeof(buffer), "pthread_mutex_unlock(&lock_%s);\n", var->name);
+      snprintf(buffer, sizeof(buffer), "pthread_mutex_unlock(&lock_%s);\n", variable_name);
       add_to_output(current_output_position, output_length, output, buffer);
     }
   } else if (node->type == NODE_FOR_LOOP) {
@@ -491,18 +483,20 @@ void emit_program(Node *node, char **output, int *output_length,
                    #include <unistd.h>\n");
     
     for (int i = 0; i < node->body.program.statement_count; i++) {
-      if (node->body.program.statements[i]->type == NODE_VAR_DECLARATION) {
-        VariableEntry *var = lookup_variable(
-          node->body.program.statements[i]->body.var_declaration.variable_name
-        );
+      Node *stmt = node->body.program.statements[i];
+      if (stmt->type == NODE_VAR_DECLARATION && 
+          stmt->body.var_declaration.is_shared) {
+        
+        char buffer[100];
+        snprintf(buffer, sizeof(buffer),
+                "pthread_mutex_t lock_%s;\n",
+                stmt->body.var_declaration.variable_name);
+        add_to_output(current_output_position, output_length, output, buffer);
 
-        if (var && var->is_shared) {
-          char buffer[100];
-          snprintf(buffer, sizeof(buffer),
-                  "pthread_mutex_t lock_%s;\n",
-                  var->name);
-          add_to_output(current_output_position, output_length, output, buffer);
-        }
+        snprintf(buffer, sizeof(buffer),
+                "pthread_mutex_init(&lock_%s, NULL);\n",
+                stmt->body.var_declaration.variable_name);
+        add_to_output(current_output_position, output_length, output, buffer);
       }
     }
 
@@ -546,13 +540,14 @@ void emit_thread(Node *node, char **output, int *output_length,
 }
 
 int main() {
-  char *str = "int x = 5; \
-              int b = 2; \
-              if (1) { \
-              x = 10; \
-              b += 2; \
-              x += 1; \
-              }"; 
+  char *str = 
+  "int x = 0; \
+  if (1) { \
+    x = x + 1; \
+    x = x + 1; \
+  } \
+  print(x);"; 
+
   int output_length = 30;
   int current_output_position = 0;
   char *output = (char *)malloc((output_length + 1) * sizeof(char));
