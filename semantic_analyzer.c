@@ -10,6 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+char *thread_functions[100];
+int thread_function_count = 0;
+
 /*
 Case 1:
 string a--- program ---a
@@ -392,6 +395,9 @@ void analyze_node(Node *node)
 
   case NODE_THREAD:
   {
+    thread_functions[thread_function_count] = strdup(node->body.thread.name);
+    thread_function_count++;
+
     int old_thread_id = current_thread_id; // gemmer den gamle thread id
     current_thread_id = next_thread_id++;
 
