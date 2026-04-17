@@ -52,6 +52,14 @@ typedef struct Node {
       struct Node *else_branch;
     } if_statement;
     struct {
+      /**
+       * Type:
+       * 0 - Regular for for loop
+       * 1 - Thread for loop
+       * 2 - Process for loop
+       */
+      int type;
+      int thread_amount;
       struct Node *initializer;
       struct Node *condition;
       struct Node *updater;

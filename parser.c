@@ -12,10 +12,11 @@
  * - Parenthesized expressions
  */
 
+#include "parser.h"
+#include "lexer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "parser.h"
 
 /* Example:
 Input: [TOKEN_INT_TYPE, TOKEN_IDENTIFIER, TOKEN_EQUAL, TOKEN_STRING_VALUE,
@@ -45,11 +46,14 @@ Program(
 /* Grammar:
 Program ::= statement*
 
-statement ::= IfStatement | Print | VarDeclaration | ForLoop | VarUpdate | Function | FunctionCall | ReturnStatement
+statement ::= IfStatement | Print | VarDeclaration | ForLoop | VarUpdate |
+Function | FunctionCall | ReturnStatement
 
-Function ::= "func" ("int" | "string") IDENTIFIER "(" ParameterList ")" "{" statement* ReturnStatement "}"
+Function ::= "func" ("int" | "string") IDENTIFIER "(" ParameterList ")" "{"
+statement* ReturnStatement "}"
 
-ParameterList ::= ( ("int" | "string") IDENTIFIER ("," ("int" | "string") IDENTIFIER)* )?
+ParameterList ::= ( ("int" | "string") IDENTIFIER ("," ("int" | "string")
+IDENTIFIER)* )?
 
 ReturnStatement ::= "return" expression ";"
 
@@ -81,7 +85,8 @@ factor ::= unary (("*" | "/") unary)*
 
 unary ::= "!" unary | primary
 
-primary ::= TOKEN_INT_VALUE | TOKEN_STRING_VALUE | IDENTIFIER | "(" expression ")"
+primary ::= TOKEN_INT_VALUE | TOKEN_STRING_VALUE | IDENTIFIER | "(" expression
+")"
  */
 
 /**
@@ -194,6 +199,8 @@ static Node *parse_statement(Lexer *lexer) {
     }
     return parse_var_update_with_semicolon(lexer);
   } else if (token.type == TOKEN_FOR) {
+    return parse_for_loop(lexer);
+  } else if (token.type == TOKEN_THREAD) {
     return parse_for_loop(lexer);
   } else if (token.type == TOKEN_FUNCTION) {
     return parse_function(lexer);
@@ -338,6 +345,14 @@ static Node *parse_for_loop(Lexer *lexer) {
   Node *node = malloc(sizeof(Node));
   node->type = NODE_FOR_LOOP;
 
+  node->body.for_loop.type = 0;
+  if (peek(lexer).type == TOKEN_THREAD) {
+    node->body.for_loop.type = 1;
+    consume(lexer, TOKEN_THREAD);
+    consume(lexer, TOKEN_EQUAL);
+    node->body.for_loop.thread_amount =
+        consume(lexer, TOKEN_INT_VALUE).value.int_value;
+  }
   consume(lexer, TOKEN_FOR);
   consume(lexer, TOKEN_LEFT_PAREN);
   node->body.for_loop.initializer = parse_var_declaration(lexer);
@@ -443,9 +458,9 @@ static Node *parse_function_call(Lexer *lexer) {
   Node *node = malloc(sizeof(Node));
   node->type = NODE_FUNCTION_CALL;
 
-  node->body.function_call.type = 0; 
+  node->body.function_call.type = 0;
   if (peek(lexer).type == TOKEN_PROCESS) {
-    node->body.function_call.type = 2; 
+    node->body.function_call.type = 2;
     consume(lexer, TOKEN_PROCESS);
   }
 
