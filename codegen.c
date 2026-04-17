@@ -58,13 +58,18 @@ function codegen {
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+int threaded_worker_counter = 1;
+static void emit_threaded_for_loop_worker(Node *node, char **output,
+                                          int *output_length,
+                                          int *current_output_position);
 
 extern char *thread_functions[100];
 extern int thread_function_count;
 
 int is_thread_function(const char *name) {
-  for(int i = 0; i < thread_function_count; i++) {
-    if(strcmp(thread_functions[i], name) == 0) return 1;
+  for (int i = 0; i < thread_function_count; i++) {
+    if (strcmp(thread_functions[i], name) == 0)
+      return 1;
   }
   return 0;
 }
@@ -86,6 +91,9 @@ void emit_function(Node *node, char **output, int *output_length,
 
 void emit_binary_operation(Node *node, char **output, int *output_length,
                            int *current_output_position);
+
+void emit_thread(Node *node, char **output, int *output_length,
+                 int *current_output_position);
 
 void add_to_output(int *current_output_position, int *output_length,
                    char **output, char *string_to_add) {
@@ -109,8 +117,10 @@ void emit_function_call(Node *node, char **output, int *output_length,
 
   if (is_thread_function(function_name)) {
     // Generate thread creation
-    add_to_output(current_output_position, output_length, output, "{pthread_t t;pthread_create(&t,NULL,");
-    add_to_output(current_output_position, output_length, output, function_name);
+    add_to_output(current_output_position, output_length, output,
+                  "{pthread_t t;pthread_create(&t,NULL,");
+    add_to_output(current_output_position, output_length, output,
+                  function_name);
     add_to_output(current_output_position, output_length, output, ",NULL);}");
     return;
   }
@@ -166,10 +176,12 @@ void emit_expression(Node *node, char **output, int *output_length,
     break;
   }
 
-  case NODE_STRING_VALUE:
-    add_to_output(current_output_position, output_length, output,
-                  node->body.string_value.value);
+  case NODE_STRING_VALUE: {
+    char quoted[256];
+    snprintf(quoted, sizeof(quoted), "\"%s\"", node->body.string_value.value);
+    add_to_output(current_output_position, output_length, output, quoted);
     break;
+  }
 
   case NODE_IDENTIFIER:
     add_to_output(current_output_position, output_length, output,
@@ -331,7 +343,125 @@ void emit_function(Node *node, char **output, int *output_length,
                    current_output_position);
   }
 
-  add_to_output(current_output_position, output_length, output, "}");
+  add_to_output(current_output_position, output_length, output,
+                "pthread_mutex_unlock(&global_lock);\n}\n");
+}
+
+static void emit_threaded_for_loop_worker(Node *node, char **output,
+                                          int *output_length,
+                                          int *current_output_position) {
+  if (!node)
+    return;
+
+  if (node->type == NODE_FOR_LOOP) {
+    if (node->body.for_loop.type == 1) {
+      char condition_first_name[64];
+      char condition_second_name[64];
+      strcpy(condition_first_name,
+             node->body.for_loop.condition->body.binary_operation.left_operand
+                 ->body.identifier.name);
+
+      if (node->body.for_loop.condition->body.binary_operation.right_operand
+              ->type == NODE_IDENTIFIER) {
+        snprintf(condition_second_name, sizeof(condition_second_name), "%s",
+                 node->body.for_loop.condition->body.binary_operation
+                     .right_operand->body.identifier.name);
+      } else if (node->body.for_loop.condition->body.binary_operation
+                     .right_operand->type == NODE_INT_VALUE) {
+        snprintf(condition_second_name, sizeof(condition_second_name), "%d",
+                 node->body.for_loop.condition->body.binary_operation
+                     .right_operand->body.int_value.value);
+      }
+      // jeg ved heller ikke hvad den anden fejl ligesom betyder?
+      int start_index = node->body.for_loop.initializer->body.var_declaration
+                            .variable_value->body.int_value.value;
+
+      char number_of_threads[6];
+      snprintf(number_of_threads, sizeof(number_of_threads), "%d",
+               node->body.for_loop.thread_amount);
+
+      char operator_buffer[3];
+      switch (
+          node->body.for_loop.condition->body.binary_operation.operator_type) {
+      case TOKEN_EQUAL_EQUAL:
+        strcpy(operator_buffer, "==");
+        break;
+      case TOKEN_NOT_EQUAL:
+        strcpy(operator_buffer, "!=");
+        break;
+      case TOKEN_GREATER_EQUAL:
+        strcpy(operator_buffer, ">=");
+        break;
+      case TOKEN_GREATER:
+        strcpy(operator_buffer, ">");
+        break;
+      case TOKEN_LESS_EQUAL:
+        strcpy(operator_buffer, "<=");
+        break;
+      case TOKEN_LESS:
+        strcpy(operator_buffer, "<");
+        break;
+      default:
+        break;
+      }
+
+      char buffer[4096];
+      snprintf(
+          buffer, sizeof(buffer),
+          "void *for_loop_worker_%d(void *arg) { int start_index = *(int "
+          "*)arg + %d; for (int %s = start_index; %s %s %s; %s = %s + %s) { ",
+          threaded_worker_counter, start_index, condition_first_name,
+          condition_first_name, operator_buffer, condition_second_name,
+          condition_first_name, condition_first_name, number_of_threads);
+      add_to_output(current_output_position, output_length, output, buffer);
+      emit_block(node->body.for_loop.body, output, output_length,
+                 current_output_position);
+      add_to_output(current_output_position, output_length, output,
+                    "} return NULL; }"); // hvordan sikre jeg mig at den ikke er
+                                         // i main? fejl linje 445-454
+      threaded_worker_counter++;
+    }
+
+    emit_threaded_for_loop_worker(node->body.for_loop.body, output,
+                                  output_length, current_output_position);
+
+    return;
+  }
+
+  if (node->type == NODE_BLOCK) {
+    for (int i = 0; i < node->body.block.statement_count; i++) {
+      emit_threaded_for_loop_worker(node->body.block.statements[i], output,
+                                    output_length, current_output_position);
+    }
+    return;
+  }
+
+  if (node->type == NODE_PROGRAM) {
+    for (int i = 0; i < node->body.program.statement_count; i++) {
+      emit_threaded_for_loop_worker(node->body.program.statements[i], output,
+                                    output_length, current_output_position);
+    }
+    return;
+  }
+
+  if (node->type == NODE_FUNCTION) {
+    for (int i = 0; i < node->body.function.statement_count; i++) {
+      emit_threaded_for_loop_worker(node->body.function.statements[i], output,
+                                    output_length, current_output_position);
+    }
+    return;
+  }
+
+  if (node->type == NODE_IF_STATEMENT) {
+    emit_threaded_for_loop_worker(node->body.if_statement.then_branch, output,
+                                  output_length, current_output_position);
+
+    if (node->body.if_statement.else_branch) {
+      emit_threaded_for_loop_worker(node->body.if_statement.else_branch, output,
+                                    output_length, current_output_position);
+    }
+    return;
+  }
 }
 
 void emit_statement(Node *node, char **output, int *output_length,
@@ -364,37 +494,30 @@ void emit_statement(Node *node, char **output, int *output_length,
       add_to_output(current_output_position, output_length, output, buffer);
       add_to_output(current_output_position, output_length, output, ");");
     }
-    if (node->body.print.print_value->type ==
-        NODE_STRING_VALUE) { // tilføjet denne
+    if (node->body.print.print_value->type == NODE_STRING_VALUE) {
       add_to_output(current_output_position, output_length, output,
                     "printf(\"%s\",");
-      add_to_output(current_output_position, output_length, output,
-                    node->body.print.print_value->body.string_value.value);
+      emit_expression(node->body.print.print_value, output, output_length,
+                      current_output_position);
       add_to_output(current_output_position, output_length, output, ");");
     } else if (node->body.print.print_value->type == NODE_IDENTIFIER) {
-      add_to_output(current_output_position, output_length, output, "printf(");
-
-      if (node->body.print.print_value->type == NODE_IDENTIFIER) {
-        if (node->body.print.print_value->body.identifier.type ==
-            TOKEN_INT_TYPE) {
-          char buffer[100];
-          snprintf(buffer, sizeof(buffer), "\"%%d\", %s",
-                   node->body.print.print_value->body.identifier.name);
-          add_to_output(current_output_position, output_length, output, buffer);
-        }
-      }
-
-      add_to_output(current_output_position, output_length, output, ");");
+      const char *fmt = (node->body.print.print_value->body.identifier.type ==
+                         TOKEN_STRING_TYPE)
+                            ? "\"%s\""
+                            : "\"%d\"";
+      char buffer[100];
+      snprintf(buffer, sizeof(buffer), "printf(%s, %s);", fmt,
+               node->body.print.print_value->body.identifier.name);
+      add_to_output(current_output_position, output_length, output, buffer);
     }
   } else if (node->type == NODE_VAR_DECLARATION) {
-    if (node->body.var_declaration.variable_type == TOKEN_INT_TYPE) {
+    if (node->body.var_declaration.variable_type == TOKEN_INT_TYPE)
       add_to_output(current_output_position, output_length, output, "int ");
-    } else if (node->body.var_declaration.variable_type == TOKEN_STRING_TYPE) {
+    else if (node->body.var_declaration.variable_type == TOKEN_STRING_TYPE)
       add_to_output(current_output_position, output_length, output, "char* ");
-    }
+
     add_to_output(current_output_position, output_length, output,
                   node->body.var_declaration.variable_name);
-    
     add_to_output(current_output_position, output_length, output, "=");
     emit_expression(node->body.var_declaration.variable_value, output,
                     output_length, current_output_position);
@@ -405,11 +528,12 @@ void emit_statement(Node *node, char **output, int *output_length,
     if (node->body.var_update.is_shared) {
       char *variable_name = node->body.var_update.variable_name;
       char buffer[100];
-      snprintf(buffer, sizeof(buffer), "pthread_mutex_lock(&lock_%s);\n", variable_name);
+      snprintf(buffer, sizeof(buffer), "pthread_mutex_lock(&lock_%s);\n",
+               variable_name);
       add_to_output(current_output_position, output_length, output, buffer);
     }
 
-    add_to_output(current_output_position, output_length, output, 
+    add_to_output(current_output_position, output_length, output,
                   node->body.var_update.variable_name);
 
     switch (node->body.var_update._operator) {
@@ -432,16 +556,59 @@ void emit_statement(Node *node, char **output, int *output_length,
     emit_expression(node->body.var_update.value, output, output_length,
                     current_output_position);
 
-    add_to_output(current_output_position, output_length, output, ";"); 
+    add_to_output(current_output_position, output_length, output, ";");
 
     // unclock the variable if it's shared after usage
     if (node->body.var_update.is_shared) {
       char *variable_name = node->body.var_update.variable_name;
       char buffer[100];
-      snprintf(buffer, sizeof(buffer), "pthread_mutex_unlock(&lock_%s);\n", variable_name);
+      snprintf(buffer, sizeof(buffer), "pthread_mutex_unlock(&lock_%s);\n",
+               variable_name);
       add_to_output(current_output_position, output_length, output, buffer);
     }
   } else if (node->type == NODE_FOR_LOOP) {
+    if (node->body.for_loop.type == 1) {
+      char number_of_threads[6];
+      snprintf(number_of_threads, sizeof(number_of_threads), "%d",
+               node->body.for_loop.thread_amount);
+
+      char array_of_threads_buffer[48];
+      snprintf(array_of_threads_buffer, sizeof(array_of_threads_buffer),
+               "pthread_t threads[%d]; int starts[%d]; ",
+               node->body.for_loop.thread_amount,
+               node->body.for_loop.thread_amount);
+      add_to_output(current_output_position, output_length, output,
+                    array_of_threads_buffer);
+
+      add_to_output(current_output_position, output_length, output,
+                    "for (int i = 0; i < ");
+      add_to_output(current_output_position, output_length, output,
+                    number_of_threads);
+
+      add_to_output(
+          current_output_position, output_length, output,
+          "; i++) { starts[i] = i; "); // hvordan fikser jeg identation
+                                       // for at undgå fejlen på linje
+                                       // 469-476... stadig ikke sikker.
+
+      char thread_creator[128];
+      snprintf(thread_creator, sizeof(thread_creator),
+               "pthread_create(&threads[i], NULL, for_loop_worker_%d, "
+               "&starts[i]); }",
+               threaded_worker_counter);
+      add_to_output(current_output_position, output_length, output,
+                    thread_creator);
+
+      add_to_output(current_output_position, output_length, output,
+                    "for (int i = 0; i <");
+      add_to_output(current_output_position, output_length, output,
+                    number_of_threads);
+      add_to_output(current_output_position, output_length, output,
+                    "; i++) { pthread_join(threads[i], NULL); }");
+
+      threaded_worker_counter++;
+      return; // måske jeg bare skal tilføje et return?? fejl linje 478
+    }
     add_to_output(current_output_position, output_length, output, "for (");
 
     emit_statement(node->body.for_loop.initializer, output, output_length,
@@ -489,7 +656,19 @@ void emit_statement(Node *node, char **output, int *output_length,
   } else if (node->type == NODE_FUNCTION_CALL) {
     emit_function_call(node, output, output_length, current_output_position);
     add_to_output(current_output_position, output_length, output, ";");
+    // MADS B
+  } else if (node->type == NODE_AWAIT) {
+    add_to_output(current_output_position, output_length, output, "result = ");
+    add_to_output(current_output_position, output_length, output,
+                  node->body.thread.name);
+    add_to_output(current_output_position, output_length, output, "();\n");
+    add_to_output(current_output_position, output_length, output,
+                  "pthread_join(");
+    add_to_output(current_output_position, output_length, output,
+                  node->body.thread.name);
+    add_to_output(current_output_position, output_length, output, ", NULL);\n");
   }
+  // MADS E
 }
 
 void emit_program(Node *node, char **output, int *output_length,
@@ -507,29 +686,43 @@ void emit_program(Node *node, char **output, int *output_length,
                    #include <stdio.h> \n\
                    #include <pthread.h> \n\
                    #include <unistd.h>\n");
-    
+
+    threaded_worker_counter = 1;
+    emit_threaded_for_loop_worker(node, output, output_length,
+                                  current_output_position);
+
+    // Emit mutex declarations + init for shared variables
     for (int i = 0; i < node->body.program.statement_count; i++) {
       Node *stmt = node->body.program.statements[i];
-      if (stmt->type == NODE_VAR_DECLARATION && 
+      if (stmt->type == NODE_VAR_DECLARATION &&
           stmt->body.var_declaration.is_shared) {
-        
-        char buffer[100];
-        snprintf(buffer, sizeof(buffer),
-                "pthread_mutex_t lock_%s;\n",
-                stmt->body.var_declaration.variable_name);
+        char buffer[150];
+        snprintf(buffer, sizeof(buffer), "pthread_mutex_t lock_%s;\n",
+                 stmt->body.var_declaration.variable_name);
         add_to_output(current_output_position, output_length, output, buffer);
 
         snprintf(buffer, sizeof(buffer),
-                "pthread_mutex_init(&lock_%s, NULL);\n",
-                stmt->body.var_declaration.variable_name);
+                 "pthread_mutex_init(&lock_%s, NULL);\n",
+                 stmt->body.var_declaration.variable_name);
         add_to_output(current_output_position, output_length, output, buffer);
       }
     }
 
+    // Emit thread functions
+    for (int i = 0; i < node->body.program.statement_count; i++) {
+      if (node->body.program.statements[i]->type == NODE_THREAD) {
+        emit_thread(node->body.program.statements[i], output, output_length,
+                    current_output_position);
+        add_to_output(current_output_position, output_length, output, "\n");
+      }
+    }
+
+    // Emit normal functions
     for (int i = 0; i < node->body.program.statement_count; i++) {
       if (node->body.program.statements[i]->type == NODE_FUNCTION) {
         emit_function(node->body.program.statements[i], output, output_length,
                       current_output_position);
+        add_to_output(current_output_position, output_length, output, "\n");
       }
     }
 
@@ -556,14 +749,18 @@ void emit_program(Node *node, char **output, int *output_length,
       }
     }
 
+    threaded_worker_counter = 1;
+
+    // Emit all non-function, non-thread statements
     for (int i = 0; i < node->body.program.statement_count; i++) {
-      if (node->body.program.statements[i]->type != NODE_FUNCTION) {
-        emit_statement(node->body.program.statements[i], output, output_length,
-                       current_output_position);
+      Node *stmt = node->body.program.statements[i];
+      if (stmt->type != NODE_FUNCTION && stmt->type != NODE_THREAD) {
+        emit_statement(stmt, output, output_length, current_output_position);
       }
     }
 
-    add_to_output(current_output_position, output_length, output, "return 0;}");
+    add_to_output(current_output_position, output_length, output,
+                  "\n  return 0;\n}\n");
   }
 }
 
@@ -619,20 +816,19 @@ void emit_parallel_statement(Node *node, char **output, int *output_length,
 
 void emit_thread(Node *node, char **output, int *output_length,
                  int *current_output_position) {
-  add_to_output(current_output_position, output_length, output, 
-                "void* ");
+  add_to_output(current_output_position, output_length, output, "void* ");
   add_to_output(current_output_position, output_length, output,
                 node->body.thread.name);
-  add_to_output(current_output_position, output_length, output, 
-                "(void* arg) {");
+  add_to_output(current_output_position, output_length, output,
+                "(void* arg) {\n");
 
   for (int i = 0; i < node->body.thread.statement_count; i++) {
     emit_statement(node->body.thread.statements[i], output, output_length,
                    current_output_position);
   }
-  
-  add_to_output(current_output_position, output_length, output, 
-                "return NULL;}");
+
+  add_to_output(current_output_position, output_length, output,
+                "  return NULL;\n}\n");
 }
 
 // int main(int argc, char *argv[]) {
@@ -694,13 +890,8 @@ void emit_thread(Node *node, char **output, int *output_length,
 //   fclose(f);
 
 int main() {
-  char *str = 
-  "int x = 0; \
-  if (1) { \
-    x = x + 1; \
-    x = x + 1; \
-  } \
-  print(x);"; 
+  char *str =
+      "thread=2 for (int i = 0; i < 100; i = i+1) {print(i); print(\" - \");}";
 
   int output_length = 30;
   int current_output_position = 0;

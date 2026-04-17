@@ -25,6 +25,9 @@ typedef enum {
   NODE_IDENTIFIER,
   NODE_THREAD,
   NODE_PARALLEL,
+  //MADS B
+  NODE_AWAIT,
+  //MADS E
 } NodeType;
 
 typedef struct Node {
@@ -39,7 +42,17 @@ typedef struct Node {
       int statement_count;
     } block;
     struct {
-      TokenType variable_type;
+      /**
+       * Due to that the value of the variable might not have been
+       * returned/resolved yet.
+       * Type:
+       *    0 - Regular function call
+       *    1 - Thread function call
+       *    2 - Process function call
+       */
+      int variable_parallel_type;
+
+      TokenType variable_type; // int | string
       char *variable_name;
       struct Node *variable_value;
       int is_shared;
@@ -56,6 +69,14 @@ typedef struct Node {
       struct Node *else_branch;
     } if_statement;
     struct {
+      /**
+       * Type:
+       * 0 - Regular for for loop
+       * 1 - Thread for loop
+       * 2 - Process for loop
+       */
+      int type;
+      int thread_amount;
       struct Node *initializer;
       struct Node *condition;
       struct Node *updater;

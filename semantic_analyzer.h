@@ -13,15 +13,18 @@
 typedef struct {
   char name[32];
   TokenType type;
-  int threads[10];
+  int thread_ids[10];
   int thread_count;
   int is_shared;
   UT_hash_handle hh;
+
+  // To keep in sync:
+  Node *variable_declaration_node;
+  // Node *variable_update;
 } VariableEntry;
 
 VariableEntry *lookup_variable(const char *name);
-void register_variable_usage(const char *name);
+void propagate_shared_flags(Node *node);
 void semantic_analyze(Node *node);
-
 
 #endif
