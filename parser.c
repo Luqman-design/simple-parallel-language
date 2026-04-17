@@ -58,8 +58,7 @@ ReturnStatement ::= "return" expression ";"
 
 CallExpression ::= (thread | process)? IDENTIFIER "(" ArgumentList ")"
 FunctionCall    ::= CallExpression ";"
-AwaitStatement ::= "await" "{" (IDENTIFIER ";")* "}" // Note: IDENTIFIER should
-only work for function names.
+AwaitStatement ::= "await" "{" IDENTIFIER ("," IDENTIFIER)* "}"
 
 ArgumentList ::= (expression ("," expression)*)?
 
@@ -72,7 +71,7 @@ Print ::= "print" "(" expression ")" ";"
 VarDeclaration ::= ("int" | "string") IDENTIFIER "=" expression | CallExpression
 ";"
 
-VarUpdate ::= IDENTIFIER ("+" | "-")? "=" expression | CallExpression ";"
+VarUpdate ::= IDENTIFIER ("+" | "-")? "=" expression
 
 ForLoop ::= "for" "(" VarDeclaration ";" expression ";" expression ")" "{"
 statement*
@@ -210,7 +209,7 @@ static Node *parse_statement(Lexer *lexer) {
     return parse_return_statement(lexer);
   } else if (token.type == TOKEN_PROCESS) {
     return parse_function_call(lexer);
-  } else if (token.type == TOKEN_THREAD) {        
+  } else if (token.type == TOKEN_THREAD) {
     return parse_thread(lexer);
   }
 
