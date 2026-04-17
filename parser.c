@@ -734,40 +734,14 @@ static Node *parse_thread(Lexer *lexer) {
   
   consume(lexer, TOKEN_THREAD);
   
-  // Must have a name: thread myThread { ... }
   Token name_token = consume(lexer, TOKEN_IDENTIFIER);
   node->body.thread.name = name_token.value.string_value;
   
-  // We ignore () for now — just consume them if they exist, or make them optional
-  // But to keep it simple and close to your example:
-  if (peek(lexer).type == TOKEN_LEFT_PAREN) {
-    consume(lexer, TOKEN_LEFT_PAREN);
-    consume(lexer, TOKEN_RIGHT_PAREN);
-  }
+  consume(lexer, TOKEN_LEFT_PAREN);
+  consume(lexer, TOKEN_RIGHT_PAREN);  
   
-  consume(lexer, TOKEN_LEFT_CURLYBRACKET);   // {
+  consume(lexer, TOKEN_LEFT_CURLYBRACKET);
+  consume(lexer, TOKEN_RIGHT_CURLYBRACKET);
   
-  // Parse the body (statements)
-  int statement_count = 0;
-  int statement_capacity = 8;
-  Node **statements = malloc(sizeof(Node *) * statement_capacity);
-
-  while (peek(lexer).type != TOKEN_RIGHT_CURLYBRACKET && 
-         peek(lexer).type != TOKEN_EOF) {
-    
-    if (statement_count >= statement_capacity) {
-      statement_capacity *= 2;
-      statements = realloc(statements, sizeof(Node *) * statement_capacity);
-    }
-    
-    statements[statement_count] = parse_statement(lexer);
-    statement_count++;
-  }
-
-  consume(lexer, TOKEN_RIGHT_CURLYBRACKET);  // }
-
-  node->body.thread.statements = statements;
-  node->body.thread.statement_count = statement_count;
-
   return node;
 }

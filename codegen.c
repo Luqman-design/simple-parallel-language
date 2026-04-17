@@ -650,11 +650,11 @@ int main()
 {
   char *str =
       "int counter = 0; \
- thread worker_one { \
+ thread a (){ \
    counter = counter + 1; \
    counter = counter + 1; \
  } \
- thread worker_two { \
+ thread b (){ \
    counter = counter + 1; \
  } \
  print(counter);";
