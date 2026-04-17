@@ -13,12 +13,14 @@
 typedef struct {
   char name[32];
   TokenType type;
-  int usage_count;
+  int thread_ids[10]; 
+  int thread_count;
   int is_shared;
   UT_hash_handle hh;
 } VariableEntry;
 
 VariableEntry *lookup_variable(const char *name);
+void propagate_shared_flags(Node *node);
 void semantic_analyze(Node *node);
 
 

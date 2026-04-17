@@ -58,8 +58,7 @@ ReturnStatement ::= "return" expression ";"
 
 CallExpression ::= (thread | process)? IDENTIFIER "(" ArgumentList ")"
 FunctionCall    ::= CallExpression ";"
-AwaitStatement ::= "await" "{" (IDENTIFIER ";")* "}" // Note: IDENTIFIER should
-only work for function names.
+AwaitStatement ::= "await" "{" IDENTIFIER ("," IDENTIFIER)* "}"
 
 ArgumentList ::= (expression ("," expression)*)?
 
@@ -72,7 +71,7 @@ Print ::= "print" "(" expression ")" ";"
 VarDeclaration ::= ("int" | "string") IDENTIFIER "=" expression | CallExpression
 ";"
 
-VarUpdate ::= IDENTIFIER ("+" | "-")? "=" expression | CallExpression ";"
+VarUpdate ::= IDENTIFIER ("+" | "-")? "=" expression
 
 ForLoop ::= "for" "(" VarDeclaration ";" expression ";" expression ")" "{"
 statement*
@@ -133,6 +132,7 @@ static Node *parse_for_loop(Lexer *lexer);
 static Node *parse_function(Lexer *lexer);
 static Node *parse_return_statement(Lexer *lexer);
 static Node *parse_function_call(Lexer *lexer);
+static Node *parse_thread(Lexer *lexer);
 static Node *parse_block(Lexer *lexer);
 static Node *parse_expression(Lexer *lexer);
 static Node *parse_comparison(Lexer *lexer);
@@ -140,9 +140,7 @@ static Node *parse_term(Lexer *lexer);
 static Node *parse_factor(Lexer *lexer);
 static Node *parse_unary(Lexer *lexer);
 static Node *parse_primary(Lexer *lexer);
-// MADS B
 static Node *parse_await(Lexer *lexer);
-// MADS E
 
 static int peek_after_identifier_is_left_paren(Lexer *lexer)
 {
@@ -238,11 +236,13 @@ static Node *parse_statement(Lexer *lexer)
   {
     return parse_function_call(lexer);
   }
-  //MADS B
+  else if (token.type == TOKEN_THREAD)
+  {
+    return parse_thread(lexer);
+  }
   else if (token.type == TOKEN_AWAIT)
   {
     return parse_await(lexer);
-  //MADS E
   }
   fprintf(stderr, "Error: Unexpected token '%s' of type '%d'\n",
           token.value.string_value, token.type);
@@ -827,19 +827,19 @@ static Node *parse_thread(Lexer *lexer)
   node->type = NODE_THREAD;
 
   consume(lexer, TOKEN_THREAD);
-
+  
   Token name_token = consume(lexer, TOKEN_IDENTIFIER);
   node->body.thread.name = name_token.value.string_value;
-
+  
   consume(lexer, TOKEN_LEFT_PAREN);
-  consume(lexer, TOKEN_RIGHT_PAREN);
-
+  consume(lexer, TOKEN_RIGHT_PAREN);  
+  
   consume(lexer, TOKEN_LEFT_CURLYBRACKET);
   consume(lexer, TOKEN_RIGHT_CURLYBRACKET);
-
+  
   return node;
 }
-//MADS B
+
 static Node *parse_await(Lexer *lexer)
 {
   Token token = peek(lexer);
@@ -866,4 +866,3 @@ static Node *parse_await(Lexer *lexer)
   fprintf(stderr, "Parser error: Unexpected token\n");
   exit(1);
 }
-//MADS E

@@ -41,14 +41,26 @@ typedef struct Node {
       int statement_count;
     } block;
     struct {
-      TokenType variable_type;
+      /**
+       * Due to that the value of the variable might not have been
+       * returned/resolved yet.
+       * Type:
+       *    0 - Regular function call
+       *    1 - Thread function call
+       *    2 - Process function call
+       */
+      int variable_parallel_type;
+
+      TokenType variable_type; // int | string
       char *variable_name;
       struct Node *variable_value;
+      int is_shared;
     } var_declaration;
     struct {
       char *variable_name;
       TokenType _operator;
       struct Node *value;
+      int is_shared;
     } var_update;
     struct {
       struct Node *condition;

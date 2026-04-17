@@ -2,5 +2,8 @@
                    #include <stdio.h> 
                    #include <pthread.h> 
                    #include <unistd.h>
+int _exp(int a) {return (a*a);}
 int main() {
-int x=5;int b=2;if (1){x=10;b+=2;x+=1;}return 0;}
+int res=_exp(10);printf("%d", res);
+  return 0;
+}
