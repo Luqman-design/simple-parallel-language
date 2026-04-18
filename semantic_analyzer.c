@@ -227,7 +227,8 @@ TokenType analyze_expression(Node *node) {
     for (int i = 0; i < node->body.function_call.argument_count; i++) {
       analyze_expression(node->body.function_call.arguments[i]);
     }
-    if (node->body.function_call.type == PARALLEL_TYPE_THREAD) {
+    if (node->body.function_call.type == PARALLEL_TYPE_THREAD ||
+        node->body.function_call.type == PARALLEL_TYPE_PROCESS) {
       analyze_threaded_function_call(node);
     }
     /* TODO: Look up function definition to determine actual return type.
@@ -365,7 +366,8 @@ void analyze_node(Node *node) {
     for (int i = 0; i < node->body.function_call.argument_count; i++) {
       analyze_expression(node->body.function_call.arguments[i]);
     }
-    if (node->body.function_call.type == PARALLEL_TYPE_THREAD) {
+    if (node->body.function_call.type == PARALLEL_TYPE_THREAD ||
+        node->body.function_call.type == PARALLEL_TYPE_PROCESS) {
       analyze_threaded_function_call(node);
     }
     break;

@@ -1,1 +1,14 @@
-for (int i = 0; i < 10; i++) { print(i); }
+func int add(int a) {
+    thread=2 for (int i = 0; i < 10; i++) { 
+        a = (a*2)+i; 
+    }
+    return a;
+}
+
+int result1 = process add(10);
+int result2 = process add(20);
+await { result1, result2 };
+
+print(result1);
+print("\n");
+print(result2);
