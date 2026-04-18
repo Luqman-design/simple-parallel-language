@@ -18,6 +18,7 @@ typedef struct {
   int thread_ids[MAX_THREAD_IDS];
   int thread_count;
   int is_shared;
+  int scope_level;
   UT_hash_handle hh;
 
   Node *variable_declaration_node;

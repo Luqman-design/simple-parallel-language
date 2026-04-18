@@ -8,7 +8,6 @@ typedef enum {
   TOKEN_STRING_TYPE,
   TOKEN_STRING_VALUE,
   TOKEN_VOID,
-  TOKEN_AMOUNT_OF_THREADS, // for the for loop
 
   // Variable
   TOKEN_IDENTIFIER,
@@ -42,7 +41,6 @@ typedef enum {
   TOKEN_PROCESS,
   TOKEN_AWAIT,
   TOKEN_THREAD,
-  TOKEN_PARALLEL,
 
   // Symbols
   TOKEN_SEMICOLON,

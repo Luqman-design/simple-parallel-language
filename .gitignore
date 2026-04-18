@@ -8,4 +8,5 @@ temp.c
 
 # Build artifacts
 codegen
+codegen_debug
 main

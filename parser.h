@@ -2,6 +2,9 @@
 #define PARSER_H
 #include "lexer.h"
 
+#define MAX_CAPTURED_VARS 20
+#define MAX_VAR_NAME_LEN 32
+
 typedef enum {
   PARALLEL_TYPE_REGULAR,
   PARALLEL_TYPE_THREAD,
@@ -53,7 +56,7 @@ typedef struct Node {
     } var_declaration;
     struct {
       char *variable_name;
-      TokenType _operator;
+      TokenType operator_type;
       struct Node *value;
       int is_shared;
     } var_update;
@@ -69,6 +72,10 @@ typedef struct Node {
       struct Node *condition;
       struct Node *updater;
       struct Node *body;
+      char captured_names[MAX_CAPTURED_VARS][MAX_VAR_NAME_LEN];
+      TokenType captured_types[MAX_CAPTURED_VARS];
+      int captured_count;
+      int worker_id;
     } for_loop;
     struct {
       TokenType return_type;

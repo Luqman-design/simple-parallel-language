@@ -14,11 +14,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/**
- * Creates a new lexer instance with the given source code input.
- * @param input The source code string to tokenize
- * @return A Lexer structure initialized with the input
- */
 Lexer new_lexer(char *input) {
   Lexer lexer;
   lexer.input = input;
@@ -27,20 +22,25 @@ Lexer new_lexer(char *input) {
   return lexer;
 }
 
-/**
- * Peeks at the current character without advancing the lexer position.
- * @param lexer Pointer to the lexer instance
- * @return The current character at the lexer position
- */
 static char peek(Lexer *lexer) { return lexer->input[lexer->position]; }
 
 /**
- * Returns the next token from the input stream and advances the position.
- * This function implements a state machine that transitions between states
- * to recognize different token types: identifiers/keywords, operators,
- * integers, strings, and punctuation.
- * @param lexer Pointer to the lexer instance
- * @return The next Token from the input
+ * Ensures the token buffer has room for at least one more character.
+ * Doubles the buffer capacity if needed.
+ */
+static void ensure_buffer_capacity(char **buf, int *capacity, int len) {
+  if (len >= *capacity - 1) {
+    *capacity *= 2;
+    *buf = realloc(*buf, (size_t)*capacity);
+    if (!*buf) {
+      fprintf(stderr, "Error: Memory allocation failed\n");
+      exit(1);
+    }
+  }
+}
+
+/**
+ * Frees memory owned by a token (string values for identifiers and strings).
  */
 void free_token(Token *token) {
   if (token->type == TOKEN_IDENTIFIER || token->type == TOKEN_STRING_VALUE) {
@@ -119,14 +119,8 @@ Token next_token(Lexer *lexer) {
               current_character == '>' || current_character == '&' ||
               current_character == '|' || current_character == '!' ||
               current_character == '+' || current_character == '-')) {
-      if (current_token_length >= buffer_capacity - 1) {
-        buffer_capacity *= 2;
-        current_token_buffer = realloc(current_token_buffer, (size_t)buffer_capacity);
-        if (!current_token_buffer) {
-          fprintf(stderr, "Error: Memory allocation failed\n");
-          exit(1);
-        }
-      }
+      ensure_buffer_capacity(&current_token_buffer, &buffer_capacity,
+                             current_token_length);
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
@@ -136,14 +130,8 @@ Token next_token(Lexer *lexer) {
                 current_character == '>' || current_character == '&' ||
                 current_character == '|' || current_character == '!' ||
                 current_character == '+' || current_character == '-')) {
-      if (current_token_length >= buffer_capacity - 1) {
-        buffer_capacity *= 2;
-        current_token_buffer = realloc(current_token_buffer, (size_t)buffer_capacity);
-        if (!current_token_buffer) {
-          fprintf(stderr, "Error: Memory allocation failed\n");
-          exit(1);
-        }
-      }
+      ensure_buffer_capacity(&current_token_buffer, &buffer_capacity,
+                             current_token_length);
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
@@ -193,14 +181,8 @@ Token next_token(Lexer *lexer) {
     // Identifiers & Keywords
     else if (state == STATE_START &&
              (current_character == '_' || isalpha(current_character))) {
-      if (current_token_length >= buffer_capacity - 1) {
-        buffer_capacity *= 2;
-        current_token_buffer = realloc(current_token_buffer, (size_t)buffer_capacity);
-        if (!current_token_buffer) {
-          fprintf(stderr, "Error: Memory allocation failed\n");
-          exit(1);
-        }
-      }
+      ensure_buffer_capacity(&current_token_buffer, &buffer_capacity,
+                             current_token_length);
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
@@ -208,14 +190,8 @@ Token next_token(Lexer *lexer) {
     } else if (state == STATE_IN_IDENTIFIER &&
                (current_character == '_' || isalpha(current_character) ||
                 isdigit(current_character))) {
-      if (current_token_length >= buffer_capacity - 1) {
-        buffer_capacity *= 2;
-        current_token_buffer = realloc(current_token_buffer, (size_t)buffer_capacity);
-        if (!current_token_buffer) {
-          fprintf(stderr, "Error: Memory allocation failed\n");
-          exit(1);
-        }
-      }
+      ensure_buffer_capacity(&current_token_buffer, &buffer_capacity,
+                             current_token_length);
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
@@ -268,14 +244,8 @@ Token next_token(Lexer *lexer) {
       lexer->position++;
       state = STATE_IN_STRING;
     } else if (state == STATE_IN_STRING && current_character != '"') {
-      if (current_token_length >= buffer_capacity - 1) {
-        buffer_capacity *= 2;
-        current_token_buffer = realloc(current_token_buffer, (size_t)buffer_capacity);
-        if (!current_token_buffer) {
-          fprintf(stderr, "Error: Memory allocation failed\n");
-          exit(1);
-        }
-      }
+      ensure_buffer_capacity(&current_token_buffer, &buffer_capacity,
+                             current_token_length);
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
@@ -296,27 +266,15 @@ Token next_token(Lexer *lexer) {
 
     // Integers
     else if (state == STATE_START && isdigit(current_character)) {
-      if (current_token_length >= buffer_capacity - 1) {
-        buffer_capacity *= 2;
-        current_token_buffer = realloc(current_token_buffer, (size_t)buffer_capacity);
-        if (!current_token_buffer) {
-          fprintf(stderr, "Error: Memory allocation failed\n");
-          exit(1);
-        }
-      }
+      ensure_buffer_capacity(&current_token_buffer, &buffer_capacity,
+                             current_token_length);
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
       state = STATE_IN_INTEGER;
     } else if (state == STATE_IN_INTEGER && isdigit(current_character)) {
-      if (current_token_length >= buffer_capacity - 1) {
-        buffer_capacity *= 2;
-        current_token_buffer = realloc(current_token_buffer, (size_t)buffer_capacity);
-        if (!current_token_buffer) {
-          fprintf(stderr, "Error: Memory allocation failed\n");
-          exit(1);
-        }
-      }
+      ensure_buffer_capacity(&current_token_buffer, &buffer_capacity,
+                             current_token_length);
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
@@ -336,7 +294,7 @@ Token next_token(Lexer *lexer) {
           current_character == '\n' || current_character == '\r') {
         lexer->position++;
       } else {
-        printf("Error: %c is an illegal symbol\n", current_character);
+        fprintf(stderr, "Error: %c is an illegal symbol\n", current_character);
         exit(1);
       }
     }

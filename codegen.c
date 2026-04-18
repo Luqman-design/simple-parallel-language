@@ -1,55 +1,81 @@
 #include "lexer.h"
 #include "parser.h"
 #include "semantic_analyzer.h"
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct {
+  char *data;
+  int capacity;
+  int length;
+} OutputBuffer;
+
+static void output_init(OutputBuffer *output, int initial_capacity) {
+  output->data = malloc((size_t)initial_capacity);
+  if (!output->data) {
+    fprintf(stderr, "Error: Memory allocation failed\n");
+    exit(1);
+  }
+  output->data[0] = '\0';
+  output->capacity = initial_capacity;
+  output->length = 0;
+}
+
+static void output_append(OutputBuffer *output, const char *str) {
+  int needed = (int)strlen(str) + output->length;
+  while (needed >= output->capacity) {
+    output->capacity *= 2;
+  }
+  output->data = realloc(output->data, (size_t)(output->capacity + 1));
+  strcpy(output->data + output->length, str);
+  output->length += (int)strlen(str);
+}
+
+static void output_appendf(OutputBuffer *output, const char *fmt, ...) {
+  char buf[4096];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  output_append(output, buf);
+}
+
 static int threaded_worker_counter = 1;
 
+#define MAX_CAPTURED 20
+static char captured_names[MAX_CAPTURED][32];
+static int captured_count = 0;
+static int saved_captured_count = 0;
+
+static int is_captured_var(const char *name) {
+  for (int i = 0; i < captured_count; i++) {
+    if (strcmp(captured_names[i], name) == 0)
+      return 1;
+  }
+  return 0;
+}
+
 /* Forward declarations */
-static void emit_statement(Node *node, char **output, int *output_length,
-                           int *current_output_position, Node *program_node);
-static void emit_expression(Node *node, char **output, int *output_length,
-                            int *current_output_position);
-static void emit_function(Node *node, char **output, int *output_length,
-                          int *current_output_position);
-static void emit_block(Node *node, char **output, int *output_length,
-                       int *current_output_position, Node *program_node);
-static void emit_operand(Node *node, char **output, int *output_length,
-                         int *current_output_position);
+static void emit_statement(Node *node, OutputBuffer *output, Node *program_node);
+static void emit_expression(Node *node, OutputBuffer *output);
+static void emit_function(Node *node, OutputBuffer *output);
+static void emit_block(Node *node, OutputBuffer *output, Node *program_node);
+static void emit_operand(Node *node, OutputBuffer *output);
 static void emit_thread_call_wrapper(Node *node, const char *result_var,
-                                     int wrapper_id, char **output,
-                                     int *output_length,
-                                     int *current_output_position,
+                                     int wrapper_id, OutputBuffer *output,
                                      Node *program_node);
 static void emit_thread_call_inline(Node *node, const char *result_var,
-                                    int wrapper_id, char **output,
-                                    int *output_length,
-                                    int *current_output_position);
-static void emit_all_thread_call_wrappers(Node *node, char **output,
-                                          int *output_length,
-                                          int *current_output_position);
-static void emit_threaded_for_loop_worker(Node *node, char **output,
-                                          int *output_length,
-                                          int *current_output_position);
-
-static void add_to_output(int *pos, int *len, char **out, const char *str) {
-  int needed = (int)strlen(str) + *pos;
-  while (needed > *len) {
-    *len *= 2;
-  }
-  *out = realloc(*out, (size_t)(*len + 1));
-  strcpy(*out + *pos, str);
-  *pos += (int)strlen(str);
-}
+                                    int wrapper_id, OutputBuffer *output);
+static void emit_all_thread_call_wrappers(Node *node, OutputBuffer *output);
+static void emit_threaded_for_loop_worker(Node *node, OutputBuffer *output);
 
 static const char *escape_string(const char *str, char *buf, int buf_size) {
   int j = 0;
   for (int i = 0; str[i] && j < buf_size - 2; i++) {
     if (str[i] == '\\' && str[i + 1]) {
-      /* Pass through known escape sequences the lexer already captured */
       buf[j++] = str[i++];
       buf[j++] = str[i];
     } else if (str[i] == '"') {
@@ -103,34 +129,31 @@ static const char *operator_to_string(TokenType type) {
   }
 }
 
-static void emit_operand(Node *node, char **output, int *output_length,
-                         int *current_output_position) {
+static void emit_operand(Node *node, OutputBuffer *output) {
   switch (node->type) {
   case NODE_BINARY_OPERATION:
-    add_to_output(current_output_position, output_length, output, "(");
-    emit_operand(node->body.binary_operation.left_operand, output,
-                 output_length, current_output_position);
-    add_to_output(
-        current_output_position, output_length, output,
-        operator_to_string(node->body.binary_operation.operator_type));
-    emit_operand(node->body.binary_operation.right_operand, output,
-                 output_length, current_output_position);
-    add_to_output(current_output_position, output_length, output, ")");
+    output_append(output, "(");
+    emit_operand(node->body.binary_operation.left_operand, output);
+    output_append(output,
+              operator_to_string(node->body.binary_operation.operator_type));
+    emit_operand(node->body.binary_operation.right_operand, output);
+    output_append(output, ")");
     break;
-  case NODE_INT_VALUE: {
-    char buf[20];
-    snprintf(buf, sizeof(buf), "%d", node->body.int_value.value);
-    add_to_output(current_output_position, output_length, output, buf);
+  case NODE_INT_VALUE:
+    output_appendf(output, "%d", node->body.int_value.value);
+    break;
+  case NODE_STRING_VALUE:
+    output_append(output, node->body.string_value.value);
+    break;
+  case NODE_IDENTIFIER: {
+    const char *name = node->body.identifier.name;
+    if (is_captured_var(name)) {
+      output_appendf(output, "(*_%s)", name);
+    } else {
+      output_append(output, name);
+    }
     break;
   }
-  case NODE_STRING_VALUE:
-    add_to_output(current_output_position, output_length, output,
-                  node->body.string_value.value);
-    break;
-  case NODE_IDENTIFIER:
-    add_to_output(current_output_position, output_length, output,
-                  node->body.identifier.name);
-    break;
   default:
     fprintf(stderr, "Unsupported operand type: %d\n", node->type);
     exit(1);
@@ -152,13 +175,13 @@ static int is_process_variable(Node *program_node, const char *name) {
   return 0;
 }
 
-static int find_function_return_type(Node *program_node, const char *fn_name) {
+static int find_function_return_type(Node *program_node, const char *function_name) {
   if (program_node->type != NODE_PROGRAM)
     return TOKEN_VOID;
   for (int i = 0; i < program_node->body.program.statement_count; i++) {
     Node *stmt = program_node->body.program.statements[i];
     if (stmt->type == NODE_FUNCTION &&
-        strcmp(stmt->body.function.name, fn_name) == 0) {
+        strcmp(stmt->body.function.name, function_name) == 0) {
       return stmt->body.function.return_type;
     }
   }
@@ -166,87 +189,68 @@ static int find_function_return_type(Node *program_node, const char *fn_name) {
 }
 
 static void emit_thread_call_wrapper(Node *node, const char *result_var,
-                                     int wrapper_id, char **output,
-                                     int *output_length,
-                                     int *current_output_position,
+                                     int wrapper_id, OutputBuffer *output,
                                      Node *program_node) {
-  const char *fn = node->body.function_call.name;
+  const char *function_name = node->body.function_call.name;
   int argc = node->body.function_call.argument_count;
 
-  char buf[256];
-  snprintf(buf, sizeof(buf), "void* thread_call_%d(void* arg) {", wrapper_id);
-  add_to_output(current_output_position, output_length, output, buf);
+  output_appendf(output, "void* thread_call_%d(void* arg) {", wrapper_id);
 
   if (argc > 0) {
-    add_to_output(current_output_position, output_length, output,
-                  "intptr_t* args=(intptr_t*)arg;");
+    output_append(output, "intptr_t* args=(intptr_t*)arg;");
   }
 
   if (result_var) {
-    int ret_type = find_function_return_type(program_node, fn);
+    int ret_type = find_function_return_type(program_node, function_name);
     if (ret_type != TOKEN_VOID) {
-      add_to_output(current_output_position, output_length, output, result_var);
-      add_to_output(current_output_position, output_length, output, "=");
+      output_append(output, result_var);
+      output_append(output, "=");
     }
   }
 
-  add_to_output(current_output_position, output_length, output, fn);
-  add_to_output(current_output_position, output_length, output, "(");
+  output_append(output, function_name);
+  output_append(output, "(");
   for (int i = 0; i < argc; i++) {
-    char ab[64];
-    snprintf(ab, sizeof(ab), "(int)args[%d]", i);
-    add_to_output(current_output_position, output_length, output, ab);
+    output_appendf(output, "(int)args[%d]", i);
     if (i < argc - 1)
-      add_to_output(current_output_position, output_length, output, ", ");
+      output_append(output, ", ");
   }
-  add_to_output(current_output_position, output_length, output, ");");
-  add_to_output(current_output_position, output_length, output,
-                "return NULL;}\n");
+  output_append(output, ");");
+  output_append(output, "return NULL;}\n");
 }
 
 static void emit_thread_call_inline(Node *node, const char *result_var,
-                                    int wrapper_id, char **output,
-                                    int *output_length,
-                                    int *current_output_position) {
+                                    int wrapper_id, OutputBuffer *output) {
   int argc = node->body.function_call.argument_count;
 
-  char buf[128];
-  snprintf(buf, sizeof(buf),
-           "pthread_t _thread_%s; pid_t _process_%s = -1;", result_var,
-           result_var);
-  add_to_output(current_output_position, output_length, output, buf);
+  output_appendf(output, "pthread_t _thread_%s; pid_t _process_%s = -1;", result_var,
+             result_var);
 
   if (argc > 0) {
     char arr_name[64];
     snprintf(arr_name, sizeof(arr_name), "_args_%s", result_var);
-    snprintf(buf, sizeof(buf), "intptr_t %s[%d]={", arr_name, argc);
-    add_to_output(current_output_position, output_length, output, buf);
+    output_appendf(output, "intptr_t %s[%d]={", arr_name, argc);
     for (int i = 0; i < argc; i++) {
-      emit_expression(node->body.function_call.arguments[i], output,
-                      output_length, current_output_position);
+      emit_expression(node->body.function_call.arguments[i], output);
       if (i < argc - 1)
-        add_to_output(current_output_position, output_length, output, ", ");
+        output_append(output, ", ");
     }
-    add_to_output(current_output_position, output_length, output, "};");
+    output_append(output, "};");
   }
 
-  snprintf(buf, sizeof(buf), "pthread_create(&_thread_%s,NULL,thread_call_%d,",
-           result_var, wrapper_id);
-  add_to_output(current_output_position, output_length, output, buf);
+  output_appendf(output, "pthread_create(&_thread_%s,NULL,thread_call_%d,", result_var,
+             wrapper_id);
 
   if (argc > 0) {
     char arr_name[64];
     snprintf(arr_name, sizeof(arr_name), "_args_%s", result_var);
-    snprintf(buf, sizeof(buf), "%s);", arr_name);
-    add_to_output(current_output_position, output_length, output, buf);
+    output_appendf(output, "%s);", arr_name);
   } else {
-    add_to_output(current_output_position, output_length, output, "NULL);");
+    output_append(output, "NULL);");
   }
 }
 
-static void emit_all_thread_call_wrappers(Node *node, char **output,
-                                          int *output_length,
-                                          int *current_output_position) {
+static void emit_all_thread_call_wrappers(Node *node, OutputBuffer *output) {
   if (node->type != NODE_PROGRAM)
     return;
   int wrapper_id = 1;
@@ -254,8 +258,7 @@ static void emit_all_thread_call_wrappers(Node *node, char **output,
     Node *stmt = node->body.program.statements[i];
     if (stmt->type == NODE_FUNCTION_CALL &&
         stmt->body.function_call.type == PARALLEL_TYPE_THREAD) {
-      emit_thread_call_wrapper(stmt, NULL, wrapper_id, output, output_length,
-                               current_output_position, node);
+      emit_thread_call_wrapper(stmt, NULL, wrapper_id, output, node);
       wrapper_id++;
     }
     if (stmt->type == NODE_VAR_DECLARATION &&
@@ -263,29 +266,21 @@ static void emit_all_thread_call_wrappers(Node *node, char **output,
             PARALLEL_TYPE_THREAD) {
       const char *result_var = stmt->body.var_declaration.variable_name;
       emit_thread_call_wrapper(stmt->body.var_declaration.variable_value,
-                               result_var, wrapper_id, output, output_length,
-                               current_output_position, node);
+                               result_var, wrapper_id, output, node);
       wrapper_id++;
     }
     if (stmt->type == NODE_THREAD) {
-      char buf[256];
-      snprintf(buf, sizeof(buf), "void* thread_call_%d(void* arg) {",
-               wrapper_id);
-      add_to_output(current_output_position, output_length, output, buf);
+      output_appendf(output, "void* thread_call_%d(void* arg) {", wrapper_id);
       for (int j = 0; j < stmt->body.thread.statement_count; j++) {
-        emit_statement(stmt->body.thread.statements[j], output, output_length,
-                       current_output_position, NULL);
+        emit_statement(stmt->body.thread.statements[j], output, NULL);
       }
-      add_to_output(current_output_position, output_length, output,
-                    "return NULL;}\n");
+      output_append(output, "return NULL;}\n");
       wrapper_id++;
     }
   }
 }
 
-static void emit_all_thread_call_inlines(Node *node, char **output,
-                                         int *output_length,
-                                         int *current_output_position) {
+static void emit_all_thread_call_inlines(Node *node, OutputBuffer *output) {
   if (node->type != NODE_PROGRAM)
     return;
   int wrapper_id = 1;
@@ -295,8 +290,7 @@ static void emit_all_thread_call_inlines(Node *node, char **output,
         stmt->body.function_call.type == PARALLEL_TYPE_THREAD) {
       char handle[32];
       snprintf(handle, sizeof(handle), "_t%d", wrapper_id);
-      emit_thread_call_inline(stmt, handle, wrapper_id, output, output_length,
-                              current_output_position);
+      emit_thread_call_inline(stmt, handle, wrapper_id, output);
       wrapper_id++;
     }
     if (stmt->type == NODE_VAR_DECLARATION &&
@@ -304,51 +298,43 @@ static void emit_all_thread_call_inlines(Node *node, char **output,
             PARALLEL_TYPE_THREAD) {
       const char *result_var = stmt->body.var_declaration.variable_name;
       emit_thread_call_inline(stmt->body.var_declaration.variable_value,
-                              result_var, wrapper_id, output, output_length,
-                              current_output_position);
+                              result_var, wrapper_id, output);
       wrapper_id++;
     }
     if (stmt->type == NODE_THREAD) {
-      char buf[256];
-      snprintf(buf, sizeof(buf),
-               "pthread_t _thread__t%d;pthread_create(&_thread__t%d,NULL,"
-               "thread_call_%d,NULL);",
-               wrapper_id, wrapper_id, wrapper_id);
-      add_to_output(current_output_position, output_length, output, buf);
+      output_appendf(output,
+                 "pthread_t _thread__t%d;pthread_create(&_thread__t%d,NULL,"
+                 "thread_call_%d,NULL);",
+                 wrapper_id, wrapper_id, wrapper_id);
       wrapper_id++;
     }
   }
 }
 
-static void emit_function_call(Node *node, char **output, int *output_length,
-                               int *current_output_position) {
-  const char *fn = node->body.function_call.name;
+static void emit_function_call(Node *node, OutputBuffer *output) {
+  const char *function_name = node->body.function_call.name;
 
   if (node->body.function_call.type == PARALLEL_TYPE_THREAD) {
-    /* Standalone thread call (no result var) - handled by emit_program */
     return;
   }
 
   if (node->body.function_call.type == PARALLEL_TYPE_PROCESS) {
-    /* Standalone process call (no result var) - handled by emit_program */
     return;
   }
 
-  add_to_output(current_output_position, output_length, output, fn);
-  add_to_output(current_output_position, output_length, output, "(");
+  output_append(output, function_name);
+  output_append(output, "(");
 
   for (int i = 0; i < node->body.function_call.argument_count; i++) {
-    emit_expression(node->body.function_call.arguments[i], output,
-                    output_length, current_output_position);
+    emit_expression(node->body.function_call.arguments[i], output);
     if (i < node->body.function_call.argument_count - 1)
-      add_to_output(current_output_position, output_length, output, ", ");
+      output_append(output, ", ");
   }
 
-  add_to_output(current_output_position, output_length, output, ")");
+  output_append(output, ")");
 }
 
-static void emit_expression(Node *node, char **output, int *output_length,
-                            int *current_output_position) {
+static void emit_expression(Node *node, OutputBuffer *output) {
   if (!node) {
     fprintf(stderr, "ERROR: NULL expression\n");
     exit(1);
@@ -356,28 +342,28 @@ static void emit_expression(Node *node, char **output, int *output_length,
 
   switch (node->type) {
   case NODE_BINARY_OPERATION:
-    emit_operand(node, output, output_length, current_output_position);
+    emit_operand(node, output);
     break;
-  case NODE_INT_VALUE: {
-    char buf[20];
-    snprintf(buf, sizeof(buf), "%d", node->body.int_value.value);
-    add_to_output(current_output_position, output_length, output, buf);
+  case NODE_INT_VALUE:
+    output_appendf(output, "%d", node->body.int_value.value);
     break;
-  }
   case NODE_STRING_VALUE: {
     char escaped[512];
     escape_string(node->body.string_value.value, escaped, sizeof(escaped));
-    char buf[540];
-    snprintf(buf, sizeof(buf), "\"%s\"", escaped);
-    add_to_output(current_output_position, output_length, output, buf);
+    output_appendf(output, "\"%s\"", escaped);
     break;
   }
-  case NODE_IDENTIFIER:
-    add_to_output(current_output_position, output_length, output,
-                  node->body.identifier.name);
+  case NODE_IDENTIFIER: {
+    const char *name = node->body.identifier.name;
+    if (is_captured_var(name)) {
+      output_appendf(output, "(*_%s)", name);
+    } else {
+      output_append(output, name);
+    }
     break;
+  }
   case NODE_FUNCTION_CALL:
-    emit_function_call(node, output, output_length, current_output_position);
+    emit_function_call(node, output);
     break;
   default:
     fprintf(stderr, "Unsupported expression type: %d\n", node->type);
@@ -385,11 +371,9 @@ static void emit_expression(Node *node, char **output, int *output_length,
   }
 }
 
-static void emit_block(Node *node, char **output, int *output_length,
-                       int *current_output_position, Node *program_node) {
+static void emit_block(Node *node, OutputBuffer *output, Node *program_node) {
   for (int i = 0; i < node->body.block.statement_count; i++) {
-    emit_statement(node->body.block.statements[i], output, output_length,
-                   current_output_position, program_node);
+    emit_statement(node->body.block.statements[i], output, program_node);
   }
 }
 
@@ -406,43 +390,37 @@ static const char *c_type(TokenType t) {
   }
 }
 
-static void emit_function(Node *node, char **output, int *output_length,
-                          int *current_output_position) {
-  add_to_output(current_output_position, output_length, output,
-                c_type(node->body.function.return_type));
-  add_to_output(current_output_position, output_length, output, " ");
-  add_to_output(current_output_position, output_length, output,
-                node->body.function.name);
-  add_to_output(current_output_position, output_length, output, "(");
+static void emit_function(Node *node, OutputBuffer *output) {
+  output_append(output, c_type(node->body.function.return_type));
+  output_append(output, " ");
+  output_append(output, node->body.function.name);
+  output_append(output, "(");
 
   for (int i = 0; i < node->body.function.param_count; i++) {
-    add_to_output(current_output_position, output_length, output,
-                  c_type(node->body.function.params[i].type));
-    add_to_output(current_output_position, output_length, output, " ");
-    add_to_output(current_output_position, output_length, output,
-                  node->body.function.params[i].name);
+    output_append(output, c_type(node->body.function.params[i].type));
+    output_append(output, " ");
+    output_append(output, node->body.function.params[i].name);
     if (i < node->body.function.param_count - 1)
-      add_to_output(current_output_position, output_length, output, ", ");
+      output_append(output, ", ");
   }
 
-  add_to_output(current_output_position, output_length, output, ") {");
+  output_append(output, ") {");
 
   for (int i = 0; i < node->body.function.statement_count; i++) {
-    emit_statement(node->body.function.statements[i], output, output_length,
-                   current_output_position, NULL);
+    emit_statement(node->body.function.statements[i], output, NULL);
   }
 
-  add_to_output(current_output_position, output_length, output, "}\n");
+  output_append(output, "}\n");
 }
 
-static void emit_threaded_for_loop_worker(Node *node, char **output,
-                                          int *output_length,
-                                          int *current_output_position) {
+static void emit_threaded_for_loop_worker(Node *node, OutputBuffer *output) {
   if (!node)
     return;
 
-  if (node->type == NODE_FOR_LOOP && node->body.for_loop.type == 1) {
-    Node *cond = node->body.for_loop.condition;
+  if (node->type == NODE_FOR_LOOP &&
+      node->body.for_loop.type == PARALLEL_TYPE_THREAD) {
+    Node *for_loop_node = node;
+    Node *cond = for_loop_node->body.for_loop.condition;
     const char *var =
         cond->body.binary_operation.left_operand->body.identifier.name;
 
@@ -454,101 +432,114 @@ static void emit_threaded_for_loop_worker(Node *node, char **output,
       snprintf(rhs, sizeof(rhs), "%d", rhs_node->body.int_value.value);
     }
 
-    int start = node->body.for_loop.initializer->body.var_declaration
+    int start = for_loop_node->body.for_loop.initializer->body.var_declaration
                     .variable_value->body.int_value.value;
-    int nthreads = node->body.for_loop.thread_amount;
+    int thread_count = for_loop_node->body.for_loop.thread_amount;
+    int captured_count_local = for_loop_node->body.for_loop.captured_count;
 
-    char buf[4096];
-    snprintf(buf, sizeof(buf),
-             "void *for_loop_worker_%d(void *arg) { "
-             "int start_index = *(int *)arg + %d; "
-             "for (int %s = start_index; %s %s %s; %s = %s + %d) { ",
-             threaded_worker_counter, start, var, var,
-             operator_to_string(cond->body.binary_operation.operator_type), rhs,
-             var, var, nthreads);
-    add_to_output(current_output_position, output_length, output, buf);
-    emit_block(node->body.for_loop.body, output, output_length,
-               current_output_position, NULL);
-    add_to_output(current_output_position, output_length, output,
-                  "} return NULL; }");
+    for_loop_node->body.for_loop.worker_id = threaded_worker_counter;
+
+    saved_captured_count = captured_count;
+    captured_count = 0;
+    for (int i = 0; i < captured_count_local; i++) {
+      strcpy(captured_names[captured_count],
+             for_loop_node->body.for_loop.captured_names[i]);
+      captured_count++;
+    }
+
+    output_appendf(output,
+               "void *for_loop_worker_%d(void *arg) { "
+               "intptr_t* _args = (intptr_t*)arg; "
+               "int start_index = (int)_args[0] + %d; ",
+               threaded_worker_counter, start);
+
+    for (int i = 0; i < captured_count_local; i++) {
+      output_appendf(output, "%s* _%s = (%s*)_args[%d]; ",
+                 c_type(for_loop_node->body.for_loop.captured_types[i]),
+                 for_loop_node->body.for_loop.captured_names[i],
+                 c_type(for_loop_node->body.for_loop.captured_types[i]), i + 1);
+
+      output_appendf(output, "pthread_mutex_t* _lock_%s = (pthread_mutex_t*)_args[%d]; ",
+                 for_loop_node->body.for_loop.captured_names[i], captured_count_local + i + 1);
+    }
+
+    output_appendf(output, "for (int %s = start_index; %s %s %s; %s = %s + %d) { ", var,
+               var, operator_to_string(cond->body.binary_operation.operator_type),
+               rhs, var, var, thread_count);
+
+    for (int i = 0; i < captured_count_local; i++) {
+      output_appendf(output, "pthread_mutex_lock(_lock_%s);",
+                 for_loop_node->body.for_loop.captured_names[i]);
+    }
+
+    emit_block(for_loop_node->body.for_loop.body, output, NULL);
+
+    for (int i = 0; i < captured_count_local; i++) {
+      output_appendf(output, "pthread_mutex_unlock(_lock_%s);",
+                 for_loop_node->body.for_loop.captured_names[i]);
+    }
+
+    output_append(output, "} return NULL; }");
+
+    captured_count = saved_captured_count;
     threaded_worker_counter++;
   }
 
-  /* Recurse into children to find nested threaded for-loops */
   switch (node->type) {
   case NODE_FOR_LOOP:
-    emit_threaded_for_loop_worker(node->body.for_loop.body, output,
-                                  output_length, current_output_position);
+    emit_threaded_for_loop_worker(node->body.for_loop.body, output);
     break;
   case NODE_BLOCK:
     for (int i = 0; i < node->body.block.statement_count; i++)
-      emit_threaded_for_loop_worker(node->body.block.statements[i], output,
-                                    output_length, current_output_position);
+      emit_threaded_for_loop_worker(node->body.block.statements[i], output);
     break;
   case NODE_PROGRAM:
     for (int i = 0; i < node->body.program.statement_count; i++)
-      emit_threaded_for_loop_worker(node->body.program.statements[i], output,
-                                    output_length, current_output_position);
+      emit_threaded_for_loop_worker(node->body.program.statements[i], output);
     break;
   case NODE_FUNCTION:
     for (int i = 0; i < node->body.function.statement_count; i++)
-      emit_threaded_for_loop_worker(node->body.function.statements[i], output,
-                                    output_length, current_output_position);
+      emit_threaded_for_loop_worker(node->body.function.statements[i], output);
     break;
   case NODE_IF_STATEMENT:
-    emit_threaded_for_loop_worker(node->body.if_statement.then_branch, output,
-                                  output_length, current_output_position);
+    emit_threaded_for_loop_worker(node->body.if_statement.then_branch, output);
     if (node->body.if_statement.else_branch)
-      emit_threaded_for_loop_worker(node->body.if_statement.else_branch, output,
-                                    output_length, current_output_position);
+      emit_threaded_for_loop_worker(node->body.if_statement.else_branch, output);
     break;
   default:
     break;
   }
 }
 
-static void emit_statement(Node *node, char **output, int *output_length,
-                           int *current_output_position,
-                           Node *program_node) {
+static void emit_statement(Node *node, OutputBuffer *output, Node *program_node) {
   switch (node->type) {
   case NODE_IF_STATEMENT: {
-    add_to_output(current_output_position, output_length, output, "if (");
-    emit_expression(node->body.if_statement.condition, output, output_length,
-                    current_output_position);
-    add_to_output(current_output_position, output_length, output, "){");
-    emit_block(node->body.if_statement.then_branch, output, output_length,
-               current_output_position, program_node);
-    add_to_output(current_output_position, output_length, output, "}");
+    output_append(output, "if (");
+    emit_expression(node->body.if_statement.condition, output);
+    output_append(output, "){");
+    emit_block(node->body.if_statement.then_branch, output, program_node);
+    output_append(output, "}");
     if (node->body.if_statement.else_branch) {
-      add_to_output(current_output_position, output_length, output, "else {");
-      emit_block(node->body.if_statement.else_branch, output, output_length,
-                 current_output_position, program_node);
-      add_to_output(current_output_position, output_length, output, "}");
+      output_append(output, "else {");
+      emit_block(node->body.if_statement.else_branch, output, program_node);
+      output_append(output, "}");
     }
     break;
   }
 
   case NODE_PRINT: {
-    Node *val = node->body.print.print_value;
-    if (val->type == NODE_INT_VALUE) {
-      char buf[32];
-      snprintf(buf, sizeof(buf), "printf(\"%%d\",%d);",
-               val->body.int_value.value);
-      add_to_output(current_output_position, output_length, output, buf);
-    } else if (val->type == NODE_STRING_VALUE) {
+    Node *print_value = node->body.print.print_value;
+    if (print_value->type == NODE_INT_VALUE) {
+      output_appendf(output, "printf(\"%%d\",%d);", print_value->body.int_value.value);
+    } else if (print_value->type == NODE_STRING_VALUE) {
       char escaped[512];
-      escape_string(val->body.string_value.value, escaped, sizeof(escaped));
-      char buf[540];
-      snprintf(buf, sizeof(buf), "printf(\"%%s\",\"%s\");", escaped);
-      add_to_output(current_output_position, output_length, output, buf);
-    } else if (val->type == NODE_IDENTIFIER) {
-      const char *fmt = (val->body.identifier.type == TOKEN_STRING_TYPE)
+      escape_string(print_value->body.string_value.value, escaped, sizeof(escaped));
+      output_appendf(output, "printf(\"%%s\",\"%s\");", escaped);
+    } else if (print_value->type == NODE_IDENTIFIER) {
+      const char *fmt = (print_value->body.identifier.type == TOKEN_STRING_TYPE)
                             ? "\"%s\""
                             : "\"%d\"";
-      char buf[100];
-      snprintf(buf, sizeof(buf), "printf(%s,%s);", fmt,
-               val->body.identifier.name);
-      add_to_output(current_output_position, output_length, output, buf);
+      output_appendf(output, "printf(%s,%s);", fmt, print_value->body.identifier.name);
     }
     break;
   }
@@ -560,129 +551,178 @@ static void emit_statement(Node *node, char **output, int *output_length,
             PARALLEL_TYPE_THREAD ||
         node->body.var_declaration.variable_parallel_type ==
             PARALLEL_TYPE_PROCESS) {
-      /* Thread call with result — handled by emit_all_thread_call_inlines */
+      /* Handled by emit_all_thread_call_inlines */
     } else {
-      add_to_output(current_output_position, output_length, output,
-                    c_type(node->body.var_declaration.variable_type));
-      add_to_output(current_output_position, output_length, output, " ");
-      add_to_output(current_output_position, output_length, output, var_name);
-      add_to_output(current_output_position, output_length, output, "=");
-      emit_expression(node->body.var_declaration.variable_value, output,
-                      output_length, current_output_position);
-      add_to_output(current_output_position, output_length, output, ";");
+      output_append(output, c_type(node->body.var_declaration.variable_type));
+      output_append(output, " ");
+      output_append(output, var_name);
+      output_append(output, "=");
+      emit_expression(node->body.var_declaration.variable_value, output);
+      output_append(output, ";");
     }
     break;
   }
 
   case NODE_VAR_UPDATE: {
+    const char *varname = node->body.var_update.variable_name;
+    int captured = is_captured_var(varname);
+
     if (node->body.var_update.is_shared) {
-      char buf[100];
-      snprintf(buf, sizeof(buf), "pthread_mutex_lock(&lock_%s);",
-               node->body.var_update.variable_name);
-      add_to_output(current_output_position, output_length, output, buf);
+      if (captured) {
+        output_appendf(output, "pthread_mutex_lock(_lock_%s);", varname);
+      } else {
+        output_appendf(output, "pthread_mutex_lock(&lock_%s);", varname);
+      }
     }
 
-    add_to_output(current_output_position, output_length, output,
-                  node->body.var_update.variable_name);
+    if (captured) {
+      output_appendf(output, "(*_%s)", varname);
+    } else {
+      output_append(output, varname);
+    }
 
-    switch (node->body.var_update._operator) {
+    switch (node->body.var_update.operator_type) {
     case TOKEN_EQUAL:
-      add_to_output(current_output_position, output_length, output, "=");
+      output_append(output, "=");
       break;
     case TOKEN_PLUS_EQUAL:
-      add_to_output(current_output_position, output_length, output, "+=");
+      output_append(output, "+=");
       break;
     case TOKEN_MINUS_EQUAL:
-      add_to_output(current_output_position, output_length, output, "-=");
+      output_append(output, "-=");
       break;
     case TOKEN_PLUS_PLUS:
-      add_to_output(current_output_position, output_length, output, "++");
+      output_append(output, "++");
       break;
     default:
       break;
     }
 
     if (node->body.var_update.value) {
-      emit_expression(node->body.var_update.value, output, output_length,
-                      current_output_position);
+      emit_expression(node->body.var_update.value, output);
     }
-    add_to_output(current_output_position, output_length, output, ";");
+    output_append(output, ";");
 
     if (node->body.var_update.is_shared) {
-      char buf[100];
-      snprintf(buf, sizeof(buf), "pthread_mutex_unlock(&lock_%s);",
-               node->body.var_update.variable_name);
-      add_to_output(current_output_position, output_length, output, buf);
+      if (captured) {
+        output_appendf(output, "pthread_mutex_unlock(_lock_%s);", varname);
+      } else {
+        output_appendf(output, "pthread_mutex_unlock(&lock_%s);", varname);
+      }
     }
     break;
   }
 
   case NODE_FOR_LOOP: {
     if (node->body.for_loop.type == PARALLEL_TYPE_THREAD) {
-      char buf[512];
-      int n = node->body.for_loop.thread_amount;
-      snprintf(
-          buf, sizeof(buf),
-          "pthread_t threads[%d]; int starts[%d]; "
-          "for (int i = 0; i < %d; i++) { starts[i] = i; "
-          "pthread_create(&threads[i], NULL, for_loop_worker_%d, "
-          "&starts[i]); } "
-          "for (int i = 0; i < %d; i++) { pthread_join(threads[i], NULL); }",
-          n, n, n, threaded_worker_counter, n);
-      add_to_output(current_output_position, output_length, output, buf);
-      threaded_worker_counter++;
+      int thread_count = node->body.for_loop.thread_amount;
+      int captured_count_local = node->body.for_loop.captured_count;
+      int worker_id = node->body.for_loop.worker_id;
+
+      saved_captured_count = captured_count;
+      captured_count = 0;
+      for (int i = 0; i < captured_count_local; i++) {
+        strcpy(captured_names[captured_count],
+               node->body.for_loop.captured_names[i]);
+        captured_count++;
+      }
+
+      if (captured_count_local == 0) {
+        output_appendf(
+            output,
+            "pthread_t threads[%d]; int starts[%d]; "
+            "for (int i = 0; i < %d; i++) { starts[i] = i; "
+            "pthread_create(&threads[i], NULL, for_loop_worker_%d, "
+            "&starts[i]); } "
+            "for (int i = 0; i < %d; i++) { pthread_join(threads[i], NULL); }",
+            thread_count, thread_count, thread_count, worker_id, thread_count);
+      } else {
+        int total_args = 1 + captured_count_local * 2;
+
+        for (int i = 0; i < captured_count_local; i++) {
+          output_appendf(output, "pthread_mutex_t _lock_%s;",
+                     node->body.for_loop.captured_names[i]);
+          output_appendf(output, "pthread_mutex_init(&_lock_%s, NULL);",
+                     node->body.for_loop.captured_names[i]);
+        }
+
+        output_appendf(output,
+                   "intptr_t _fargs[%d][%d]; "
+                   "for (int _fi = 0; _fi < %d; _fi++) { "
+                   "_fargs[_fi][0] = _fi; ",
+                   thread_count, total_args, thread_count);
+
+        for (int i = 0; i < captured_count_local; i++) {
+          output_appendf(output,
+                     "_fargs[_fi][%d] = (intptr_t)&%s; "
+                     "_fargs[_fi][%d] = (intptr_t)&_lock_%s; ",
+                     i + 1, node->body.for_loop.captured_names[i],
+                     captured_count_local + i + 1, node->body.for_loop.captured_names[i]);
+        }
+        output_append(output, "} ");
+
+        output_appendf(output,
+                   "pthread_t threads[%d]; "
+                   "for (int i = 0; i < %d; i++) { "
+                   "pthread_create(&threads[i], NULL, for_loop_worker_%d, "
+                   "_fargs[i]); } "
+                   "for (int i = 0; i < %d; i++) { pthread_join(threads[i], "
+                   "NULL); }",
+                   thread_count, thread_count, worker_id, thread_count);
+
+        for (int i = 0; i < captured_count_local; i++) {
+          output_appendf(output, "pthread_mutex_destroy(&_lock_%s);",
+                     node->body.for_loop.captured_names[i]);
+        }
+      }
+
+      captured_count = saved_captured_count;
       return;
     }
 
-    add_to_output(current_output_position, output_length, output, "for (");
-    emit_statement(node->body.for_loop.initializer, output, output_length,
-                   current_output_position, program_node);
-    add_to_output(current_output_position, output_length, output, " ");
-    emit_expression(node->body.for_loop.condition, output, output_length,
-                    current_output_position);
-    add_to_output(current_output_position, output_length, output, "; ");
+    output_append(output, "for (");
+    emit_statement(node->body.for_loop.initializer, output, program_node);
+    output_append(output, " ");
+    emit_expression(node->body.for_loop.condition, output);
+    output_append(output, "; ");
 
-    Node *up = node->body.for_loop.updater;
-    add_to_output(current_output_position, output_length, output,
-                  up->body.var_update.variable_name);
-    switch (up->body.var_update._operator) {
+    Node *updater_node = node->body.for_loop.updater;
+    output_append(output, updater_node->body.var_update.variable_name);
+    switch (updater_node->body.var_update.operator_type) {
     case TOKEN_EQUAL:
-      add_to_output(current_output_position, output_length, output, "=");
+      output_append(output, "=");
       break;
     case TOKEN_PLUS_EQUAL:
-      add_to_output(current_output_position, output_length, output, "+=");
+      output_append(output, "+=");
       break;
     case TOKEN_MINUS_EQUAL:
-      add_to_output(current_output_position, output_length, output, "-=");
+      output_append(output, "-=");
       break;
     case TOKEN_PLUS_PLUS:
-      add_to_output(current_output_position, output_length, output, "++");
+      output_append(output, "++");
       break;
     default:
       break;
     }
-    if (up->body.var_update.value) {
-      emit_expression(up->body.var_update.value, output, output_length,
-                      current_output_position);
+    if (updater_node->body.var_update.value) {
+      emit_expression(updater_node->body.var_update.value, output);
     }
-    add_to_output(current_output_position, output_length, output, ") {");
-    emit_block(node->body.for_loop.body, output, output_length,
-               current_output_position, program_node);
-    add_to_output(current_output_position, output_length, output, "}");
+    output_append(output, ") {");
+    emit_block(node->body.for_loop.body, output, program_node);
+    output_append(output, "}");
     break;
   }
 
   case NODE_RETURN_STATEMENT: {
-    add_to_output(current_output_position, output_length, output, "return ");
-    emit_expression(node->body.return_statement.expression, output,
-                    output_length, current_output_position);
-    add_to_output(current_output_position, output_length, output, ";");
+    output_append(output, "return ");
+    emit_expression(node->body.return_statement.expression, output);
+    output_append(output, ";");
     break;
   }
 
   case NODE_FUNCTION_CALL: {
-    emit_function_call(node, output, output_length, current_output_position);
-    add_to_output(current_output_position, output_length, output, ";");
+    emit_function_call(node, output);
+    output_append(output, ";");
     break;
   }
 
@@ -690,15 +730,12 @@ static void emit_statement(Node *node, char **output, int *output_length,
     for (int i = 0; i < node->body.thread.statement_count; i++) {
       Node *id_node = (Node *)node->body.thread.statements[i];
       const char *name = id_node->body.identifier.name;
-      char buf[256];
       if (is_process_variable(program_node, name)) {
-        snprintf(buf, sizeof(buf),
-                 "waitpid(_process_%s, NULL, 0); %s = *%s_ptr;",
-                 name, name, name);
+        output_appendf(output, "waitpid(_process_%s, NULL, 0); %s = *%s_ptr;", name,
+                   name, name);
       } else {
-        snprintf(buf, sizeof(buf), "pthread_join(_thread_%s, NULL);", name);
+        output_appendf(output, "pthread_join(_thread_%s, NULL);", name);
       }
-      add_to_output(current_output_position, output_length, output, buf);
     }
     break;
   }
@@ -708,21 +745,19 @@ static void emit_statement(Node *node, char **output, int *output_length,
   }
 }
 
-static void emit_program(Node *node, char **output, int *output_length,
-                         int *current_output_position) {
+static void emit_program(Node *node, OutputBuffer *output) {
   if (node->type != NODE_PROGRAM)
     return;
 
-  add_to_output(current_output_position, output_length, output,
-                "#include <stdlib.h>\n"
-                "#include <stdio.h>\n"
-                "#include <stdint.h>\n"
-                "#include <pthread.h>\n"
-                "#include <unistd.h>\n"
-                "#include <sys/wait.h>\n"
-                "#include <sys/mman.h>\n");
+  output_append(output,
+            "#include <stdlib.h>\n"
+            "#include <stdio.h>\n"
+            "#include <stdint.h>\n"
+            "#include <pthread.h>\n"
+            "#include <unistd.h>\n"
+            "#include <sys/wait.h>\n"
+            "#include <sys/mman.h>\n");
 
-  /* Emit global result variables for thread/process calls with return values */
   for (int i = 0; i < node->body.program.statement_count; i++) {
     Node *stmt = node->body.program.statements[i];
     if (stmt->type == NODE_VAR_DECLARATION &&
@@ -731,65 +766,49 @@ static void emit_program(Node *node, char **output, int *output_length,
          stmt->body.var_declaration.variable_parallel_type ==
              PARALLEL_TYPE_PROCESS)) {
       const char *name = stmt->body.var_declaration.variable_name;
-      char buf[64];
-      snprintf(buf, sizeof(buf), "%s %s = 0;\n",
-               c_type(stmt->body.var_declaration.variable_type), name);
-      add_to_output(current_output_position, output_length, output, buf);
+      output_appendf(output, "%s %s = 0;\n",
+                 c_type(stmt->body.var_declaration.variable_type), name);
       if (stmt->body.var_declaration.variable_parallel_type ==
           PARALLEL_TYPE_PROCESS) {
-        snprintf(buf, sizeof(buf), "int* %s_ptr;\n", name);
-        add_to_output(current_output_position, output_length, output, buf);
+        output_appendf(output, "int* %s_ptr;\n", name);
       }
     }
   }
 
-  /* Emit top-level variable declarations globally so they're accessible
-     from threaded worker functions */
   for (int i = 0; i < node->body.program.statement_count; i++) {
     Node *stmt = node->body.program.statements[i];
     if (stmt->type == NODE_VAR_DECLARATION &&
         stmt->body.var_declaration.variable_parallel_type ==
             PARALLEL_TYPE_REGULAR) {
-      char buf[64];
-      snprintf(buf, sizeof(buf),
-               "%s %s = ", c_type(stmt->body.var_declaration.variable_type),
-               stmt->body.var_declaration.variable_name);
-      add_to_output(current_output_position, output_length, output, buf);
-      emit_expression(stmt->body.var_declaration.variable_value, output,
-                      output_length, current_output_position);
-      add_to_output(current_output_position, output_length, output, ";\n");
+      output_appendf(output, "%s %s = ", c_type(stmt->body.var_declaration.variable_type),
+                 stmt->body.var_declaration.variable_name);
+      emit_expression(stmt->body.var_declaration.variable_value, output);
+      output_append(output, ";\n");
     }
   }
 
-  /* Emit mutex declarations for shared variables before workers */
   for (int i = 0; i < node->body.program.statement_count; i++) {
     Node *stmt = node->body.program.statements[i];
     if (stmt->type == NODE_VAR_DECLARATION &&
         stmt->body.var_declaration.is_shared) {
-      char buf[150];
-      snprintf(buf, sizeof(buf), "pthread_mutex_t lock_%s;\n",
-               stmt->body.var_declaration.variable_name);
-      add_to_output(current_output_position, output_length, output, buf);
+      output_appendf(output, "pthread_mutex_t lock_%s;\n",
+                 stmt->body.var_declaration.variable_name);
     }
   }
 
   threaded_worker_counter = 1;
-  emit_threaded_for_loop_worker(node, output, output_length,
-                                current_output_position);
+  emit_threaded_for_loop_worker(node, output);
 
-  /* Emit function definitions */
   for (int i = 0; i < node->body.program.statement_count; i++) {
     Node *stmt = node->body.program.statements[i];
     if (stmt->type == NODE_FUNCTION) {
-      emit_function(stmt, output, output_length, current_output_position);
-      add_to_output(current_output_position, output_length, output, "\n");
+      emit_function(stmt, output);
+      output_append(output, "\n");
     }
   }
 
-  emit_all_thread_call_wrappers(node, output, output_length,
-                                current_output_position);
+  emit_all_thread_call_wrappers(node, output);
 
-  /* Emit process wrapper functions */
   {
     int process_id = 1;
     for (int i = 0; i < node->body.program.statement_count; i++) {
@@ -798,49 +817,38 @@ static void emit_program(Node *node, char **output, int *output_length,
           stmt->body.var_declaration.variable_parallel_type ==
               PARALLEL_TYPE_PROCESS) {
         Node *call = stmt->body.var_declaration.variable_value;
-        const char *fn = call->body.function_call.name;
+        const char *function_name = call->body.function_call.name;
         int argc = call->body.function_call.argument_count;
-        const char *result_var = stmt->body.var_declaration.variable_name;
 
-        char buf[256];
-        snprintf(buf, sizeof(buf), "void process_call_%d(int* result) {",
-                 process_id);
-        add_to_output(current_output_position, output_length, output, buf);
-
-        add_to_output(current_output_position, output_length, output, "*result=");
-        add_to_output(current_output_position, output_length, output, fn);
-        add_to_output(current_output_position, output_length, output, "(");
+        output_appendf(output, "void process_call_%d(int* result) {", process_id);
+        output_append(output, "*result=");
+        output_append(output, function_name);
+        output_append(output, "(");
         for (int j = 0; j < argc; j++) {
-          emit_expression(call->body.function_call.arguments[j], output,
-                          output_length, current_output_position);
+          emit_expression(call->body.function_call.arguments[j], output);
           if (j < argc - 1)
-            add_to_output(current_output_position, output_length, output, ", ");
+            output_append(output, ", ");
         }
-        add_to_output(current_output_position, output_length, output, ");");
-        add_to_output(current_output_position, output_length, output,
-                      "exit(0);}\n");
+        output_append(output, ");");
+        output_append(output, "exit(0);}\n");
         process_id++;
       }
     }
   }
 
-  add_to_output(current_output_position, output_length, output,
-                "int main() {\n");
+  output_append(output, "int main() {\n");
 
   for (int i = 0; i < node->body.program.statement_count; i++) {
     Node *stmt = node->body.program.statements[i];
     if (stmt->type == NODE_VAR_DECLARATION &&
         stmt->body.var_declaration.is_shared) {
-      char buf[150];
-      snprintf(buf, sizeof(buf), "pthread_mutex_init(&lock_%s, NULL);\n",
-               stmt->body.var_declaration.variable_name);
-      add_to_output(current_output_position, output_length, output, buf);
+      output_appendf(output, "pthread_mutex_init(&lock_%s, NULL);\n",
+                 stmt->body.var_declaration.variable_name);
     }
   }
 
   threaded_worker_counter = 1;
 
-  /* Emit shared memory for process result variables */
   {
     int process_id = 1;
     for (int i = 0; i < node->body.program.statement_count; i++) {
@@ -849,28 +857,21 @@ static void emit_program(Node *node, char **output, int *output_length,
           stmt->body.var_declaration.variable_parallel_type ==
               PARALLEL_TYPE_PROCESS) {
         const char *name = stmt->body.var_declaration.variable_name;
-        char buf[256];
-        snprintf(buf, sizeof(buf),
-                 "%s_ptr = mmap(NULL, sizeof(int), "
-                 "PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0); "
-                 "*%s_ptr = 0; pid_t _process_%s = fork(); "
-                 "if (_process_%s == 0) { process_call_%d(%s_ptr); } ",
-                 name, name, name, name, process_id, name);
-        add_to_output(current_output_position, output_length, output, buf);
-        /* Dummy thread handle so await can call pthread_join safely */
-        char dummy[64];
-        snprintf(dummy, sizeof(dummy), "pthread_t _thread_%s;", name);
-        add_to_output(current_output_position, output_length, output, dummy);
+        output_appendf(
+            output,
+            "%s_ptr = mmap(NULL, sizeof(int), "
+            "PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0); "
+            "*%s_ptr = 0; pid_t _process_%s = fork(); "
+            "if (_process_%s == 0) { process_call_%d(%s_ptr); } ",
+            name, name, name, name, process_id, name);
+        output_appendf(output, "pthread_t _thread_%s;", name);
         process_id++;
       }
     }
   }
 
-  /* Emit thread call inlines (pthread_create calls) */
-  emit_all_thread_call_inlines(node, output, output_length,
-                               current_output_position);
+  emit_all_thread_call_inlines(node, output);
 
-  /* Join unnamed threads before other statements */
   {
     int unnamed_count = 0;
     for (int i = 0; i < node->body.program.statement_count; i++) {
@@ -882,9 +883,7 @@ static void emit_program(Node *node, char **output, int *output_length,
       }
     }
     for (int i = 1; i <= unnamed_count; i++) {
-      char buf[128];
-      snprintf(buf, sizeof(buf), "pthread_join(_thread__t%d, NULL);", i);
-      add_to_output(current_output_position, output_length, output, buf);
+      output_appendf(output, "pthread_join(_thread__t%d, NULL);", i);
     }
   }
 
@@ -897,11 +896,10 @@ static void emit_program(Node *node, char **output, int *output_length,
         stmt->type == NODE_THREAD) {
       continue;
     }
-    emit_statement(stmt, output, output_length, current_output_position, node);
+    emit_statement(stmt, output, node);
   }
 
-  add_to_output(current_output_position, output_length, output,
-                "\n  return 0;\n}\n");
+  output_append(output, "\n  return 0;\n}\n");
 }
 
 static char *read_file(const char *path) {
@@ -935,28 +933,27 @@ int main(int argc, char **argv) {
   if (!source)
     return 1;
 
-  int output_length = 64;
-  int current_output_position = 0;
-  char *output = malloc((size_t)output_length);
+  OutputBuffer output;
+  output_init(&output, 64);
 
   Lexer lexer = new_lexer(source);
   Node *root = parse(&lexer);
   semantic_analyze(root);
-  emit_program(root, &output, &output_length, &current_output_position);
+  emit_program(root, &output);
 
-  printf("\nResult:\n%s\n", output);
+  printf("\nResult:\n%s\n", output.data);
 
   FILE *f = fopen("temp.c", "w");
   if (!f) {
     perror("fopen");
     free(source);
-    free(output);
+    free(output.data);
     return 1;
   }
-  fputs(output, f);
+  fputs(output.data, f);
   fclose(f);
   free(source);
-  free(output);
+  free(output.data);
   free_node(root);
 
 #if defined(_WIN32)
@@ -966,7 +963,7 @@ int main(int argc, char **argv) {
   system("gcc temp.c -o temp");
   system("./temp");
 #else
-  printf("Unsupported OS\n");
+  fprintf(stderr, "Unsupported OS\n");
 #endif
 
   return 0;

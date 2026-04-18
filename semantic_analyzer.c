@@ -23,6 +23,32 @@ static Node *function_nodes[MAX_FUNCTIONS];
 static char *function_names[MAX_FUNCTIONS];
 static int function_count = 0;
 
+static Node *current_threaded_for_loop = NULL;
+
+static void detect_captured_variable(const char *variable_name,
+                                     VariableEntry *variable) {
+  if (!current_threaded_for_loop || variable->scope_level >= scope_top)
+    return;
+
+  Node *fl = current_threaded_for_loop;
+  const char *loop_var =
+      fl->body.for_loop.initializer->body.var_declaration.variable_name;
+  if (strcmp(variable_name, loop_var) == 0)
+    return;
+
+  for (int i = 0; i < fl->body.for_loop.captured_count; i++) {
+    if (strcmp(fl->body.for_loop.captured_names[i], variable_name) == 0)
+      return;
+  }
+
+  if (fl->body.for_loop.captured_count < MAX_CAPTURED_VARS) {
+    int idx = fl->body.for_loop.captured_count;
+    strcpy(fl->body.for_loop.captured_names[idx], variable_name);
+    fl->body.for_loop.captured_types[idx] = variable->type;
+    fl->body.for_loop.captured_count++;
+  }
+}
+
 void enter_scope();
 void exit_scope();
 VariableEntry *lookup_variable(const char *name);
@@ -78,19 +104,20 @@ void insert_variable(const char *name, TokenType type,
   HASH_FIND_STR(scopes[scope_top], name, variable);
 
   if (variable != NULL) {
-    printf("Semantic error: Variable %s is already declared\n", name);
+    fprintf(stderr, "Semantic error: Variable %s is already declared\n", name);
     exit(1);
   }
 
   variable = malloc(sizeof(VariableEntry));
   if (!variable) {
-    printf("Semantic error: Memory allocation failed\n");
+    fprintf(stderr, "Semantic error: Memory allocation failed\n");
     exit(1);
   }
   strcpy(variable->name, name);
   variable->type = type;
   variable->thread_count = 0;
   variable->is_shared = 0;
+  variable->scope_level = scope_top;
   variable->variable_declaration_node = variable_declaration_node;
 
   HASH_ADD_STR(scopes[scope_top], name, variable);
@@ -116,7 +143,7 @@ void check_operators(Node *node, char *error_message) {
       analyze_expression(node->body.binary_operation.right_operand);
 
   if (left_operand != TOKEN_INT_TYPE || right_operand != TOKEN_INT_TYPE) {
-    printf("%s", error_message);
+    fprintf(stderr, "%s", error_message);
     exit(1);
   }
 }
@@ -128,7 +155,7 @@ void check_equality_operators(Node *node, char *error_message) {
       analyze_expression(node->body.binary_operation.right_operand);
 
   if (left_operand != right_operand) {
-    printf("%s", error_message);
+    fprintf(stderr, "%s", error_message);
     exit(1);
   }
 }
@@ -163,7 +190,7 @@ TokenType analyze_binary_operation(Node *node) {
                           "type int on type int\n");
     break;
   default:
-    printf("Semantic error: Unsupported operator in binary operation\n");
+    fprintf(stderr, "Semantic error: Unsupported operator in binary operation\n");
     exit(1);
   }
 
@@ -204,11 +231,12 @@ TokenType analyze_expression(Node *node) {
     VariableEntry *variable = lookup_variable(node->body.identifier.name);
     char *variable_name = node->body.identifier.name;
     if (variable == NULL) {
-      printf("Semantic error: Variable %s is not declared\n", variable_name);
+      fprintf(stderr, "Semantic error: Variable %s is not declared\n", variable_name);
       exit(1);
     }
     node->body.identifier.type = variable->type;
     register_variable_usage(variable_name);
+    detect_captured_variable(variable_name, variable);
 
     return variable->type;
   }
@@ -218,7 +246,7 @@ TokenType analyze_expression(Node *node) {
     TokenType operand_type =
         analyze_expression(node->body.unary_operation.operand);
     if (operand_type != TOKEN_INT_TYPE) {
-      printf("Semantic error: Unary operator requires an integer operand\n");
+      fprintf(stderr, "Semantic error: Unary operator requires an integer operand\n");
       exit(1);
     }
     return TOKEN_INT_TYPE;
@@ -235,7 +263,7 @@ TokenType analyze_expression(Node *node) {
      * Currently always returns TOKEN_INT_TYPE as a fallback. */
     return TOKEN_INT_TYPE;
   default:
-    printf("Semantic error: Unsupported node type in expression analysis\n");
+    fprintf(stderr, "Semantic error: Unsupported node type in expression analysis\n");
     exit(1);
   }
 }
@@ -264,7 +292,7 @@ void analyze_node(Node *node) {
         analyze_expression(node->body.var_declaration.variable_value);
 
     if (expression_type != variable_type) {
-      printf("Semantic error: Type mismatch in assignment to %s\n",
+      fprintf(stderr, "Semantic error: Type mismatch in assignment to %s\n",
              variable_name);
       exit(1);
     }
@@ -286,18 +314,20 @@ void analyze_node(Node *node) {
 
     VariableEntry *var = lookup_variable(variable_name);
     if (!var) {
-      printf("Semantic error: Variable %s is not declared\n", variable_name);
+      fprintf(stderr, "Semantic error: Variable %s is not declared\n", variable_name);
       exit(1);
     }
 
     node->body.var_update.is_shared = var->is_shared;
-    var->variable_declaration_node->body.var_declaration.is_shared =
-        var->is_shared;
+    if (var->variable_declaration_node) {
+      var->variable_declaration_node->body.var_declaration.is_shared =
+          var->is_shared;
+    }
 
     if (node->body.var_update.value) {
       TokenType value_type = analyze_expression(node->body.var_update.value);
       if (value_type != var->type) {
-        printf("Semantic error: Type mismatch in variable update on %s\n",
+        fprintf(stderr, "Semantic error: Type mismatch in variable update on %s\n",
                variable_name);
         exit(1);
       }
@@ -311,7 +341,7 @@ void analyze_node(Node *node) {
         analyze_expression(node->body.if_statement.condition);
 
     if (condition_type != TOKEN_INT_TYPE) {
-      printf("Semantic error: if condition must be integer\n");
+      fprintf(stderr, "Semantic error: if condition must be integer\n");
       exit(1);
     }
     analyze_node(node->body.if_statement.then_branch);
@@ -326,14 +356,17 @@ void analyze_node(Node *node) {
     TokenType condition_type =
         analyze_expression(node->body.for_loop.condition);
     if (condition_type != TOKEN_INT_TYPE) {
-      printf("Semantic error: for loop condition must be integer\n");
+      fprintf(stderr, "Semantic error: for loop condition must be integer\n");
       exit(1);
     }
     analyze_node(node->body.for_loop.updater);
     if (node->body.for_loop.type == PARALLEL_TYPE_THREAD) {
       int saved_thread_id = current_thread_id;
       current_thread_id = next_thread_id++;
+      Node *saved_for_loop = current_threaded_for_loop;
+      current_threaded_for_loop = node;
       analyze_node(node->body.for_loop.body);
+      current_threaded_for_loop = saved_for_loop;
       current_thread_id = saved_thread_id;
     } else {
       analyze_node(node->body.for_loop.body);
@@ -396,7 +429,7 @@ void analyze_node(Node *node) {
   }
 
   default:
-    printf("Semantic error: Unsupported node type in semantic analysis\n");
+    fprintf(stderr, "Semantic error: Unsupported node type in semantic analysis\n");
     exit(1);
   }
 }

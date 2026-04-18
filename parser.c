@@ -61,12 +61,6 @@ static Token peek(Lexer *lexer) {
   return next_token(&copy);
 }
 
-static int peek_is_left_paren_after_identifier(Lexer *lexer) {
-  Lexer copy = *lexer;
-  next_token(&copy);
-  return next_token(&copy).type == TOKEN_LEFT_PAREN;
-}
-
 /**
  * Parses the entire program as a sequence of statements.
  * Continues parsing statements until end of input or illegal token.
@@ -120,8 +114,6 @@ static Node *parse_statement(Lexer *lexer) {
   } else if (token.type == TOKEN_INT_TYPE || token.type == TOKEN_STRING_TYPE) {
     return parse_var_declaration(lexer);
   } else if (token.type == TOKEN_IDENTIFIER) {
-    if (peek_is_left_paren_after_identifier(lexer)) {
-    }
     return parse_var_update_with_semicolon(lexer);
   } else if (token.type == TOKEN_FOR) {
     return parse_for_loop(lexer);
@@ -147,17 +139,17 @@ static Node *parse_statement(Lexer *lexer) {
       consume(lexer, TOKEN_LEFT_CURLYBRACKET);
       int count = 0;
       int capacity = 4;
-      Node **stmts = check_alloc(malloc(sizeof(Node *) * (size_t)capacity));
+      Node **statements = check_alloc(malloc(sizeof(Node *) * (size_t)capacity));
       while (peek(lexer).type != TOKEN_RIGHT_CURLYBRACKET) {
         if (count >= capacity) {
           capacity *= 2;
-          stmts = check_alloc(realloc(stmts, sizeof(Node *) * (size_t)capacity));
+          statements = check_alloc(realloc(statements, sizeof(Node *) * (size_t)capacity));
         }
-        stmts[count] = parse_statement(lexer);
+        statements[count] = parse_statement(lexer);
         count++;
       }
       consume(lexer, TOKEN_RIGHT_CURLYBRACKET);
-      node->body.thread.statements = stmts;
+      node->body.thread.statements = statements;
       node->body.thread.statement_count = count;
       return node;
     } else {
@@ -322,7 +314,7 @@ static Node *parse_var_update(Lexer *lexer)
   }
 
   node->body.var_update.variable_name = variable_name.value.string_value;
-  node->body.var_update._operator = operator_type;
+  node->body.var_update.operator_type = operator_type;
   node->body.var_update.value = expression;
 
   return node;
@@ -359,6 +351,8 @@ static Node *parse_for_loop(Lexer *lexer)
 
   // parse for_loop block
   node->body.for_loop.body = parse_block(lexer);
+  node->body.for_loop.captured_count = 0;
+  node->body.for_loop.worker_id = 0;
 
   return node;
 }
