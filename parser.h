@@ -2,6 +2,12 @@
 #define PARSER_H
 #include "lexer.h"
 
+typedef enum {
+  PARALLEL_TYPE_REGULAR,
+  PARALLEL_TYPE_THREAD,
+  PARALLEL_TYPE_PROCESS
+} ParallelType;
+
 typedef struct {
   TokenType type;
   char *name;
@@ -24,10 +30,7 @@ typedef enum {
   NODE_STRING_VALUE,
   NODE_IDENTIFIER,
   NODE_THREAD,
-  NODE_PARALLEL,
-  //MADS B
   NODE_AWAIT,
-  //MADS E
 } NodeType;
 
 typedef struct Node {
@@ -42,17 +45,8 @@ typedef struct Node {
       int statement_count;
     } block;
     struct {
-      /**
-       * Due to that the value of the variable might not have been
-       * returned/resolved yet.
-       * Type:
-       *    0 - Regular function call
-       *    1 - Thread function call
-       *    2 - Process function call
-       */
-      int variable_parallel_type;
-
-      TokenType variable_type; // int | string
+      ParallelType variable_parallel_type;
+      TokenType variable_type;
       char *variable_name;
       struct Node *variable_value;
       int is_shared;
@@ -69,13 +63,7 @@ typedef struct Node {
       struct Node *else_branch;
     } if_statement;
     struct {
-      /**
-       * Type:
-       * 0 - Regular for for loop
-       * 1 - Thread for loop
-       * 2 - Process for loop
-       */
-      int type;
+      ParallelType type;
       int thread_amount;
       struct Node *initializer;
       struct Node *condition;
@@ -99,12 +87,6 @@ typedef struct Node {
       struct Node *expression;
     } return_statement;
     struct {
-      /**
-       * Type:
-       * 0 - Regular function call
-       * 1 - Thread function call
-       * 2 - Process function call
-       */
       int type;
       char *name;
       struct Node **arguments;
@@ -126,7 +108,7 @@ typedef struct Node {
       char *value;
     } string_value;
     struct {
-      TokenType type; // Assigned at semantic analysis
+      TokenType type;
       char *name;
     } identifier;
     struct {
@@ -134,14 +116,10 @@ typedef struct Node {
       struct Node **statements;
       int statement_count;
     } thread;
-    struct {
-      int parallel_id;
-      struct Node **sections;
-      int section_count;
-    } parallel;
   } body;
 } Node;
 
 Node *parse(Lexer *lexer);
+void free_node(Node *node);
 
 #endif

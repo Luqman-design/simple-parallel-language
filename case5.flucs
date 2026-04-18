@@ -1,0 +1,7 @@
+int counter = 0;
+
+thread {
+    counter += 10;
+    counter += 10;
+    counter += 10;
+}

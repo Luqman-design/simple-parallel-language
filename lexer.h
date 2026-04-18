@@ -7,6 +7,7 @@ typedef enum {
   TOKEN_INT_VALUE,
   TOKEN_STRING_TYPE,
   TOKEN_STRING_VALUE,
+  TOKEN_VOID,
   TOKEN_AMOUNT_OF_THREADS, // for the for loop
 
   // Variable
@@ -72,6 +73,8 @@ typedef struct {
     int int_value;
   } value;
 } Token;
+
+void free_token(Token *token);
 
 typedef struct {
   char *input;

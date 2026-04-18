@@ -1,3 +1,11 @@
 # Compiled files
 *.exe
 *.o
+
+# Generated files
+temp
+temp.c
+
+# Build artifacts
+codegen
+main

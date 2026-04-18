@@ -18,111 +18,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Example:
-Input: [TOKEN_INT_TYPE, TOKEN_IDENTIFIER, TOKEN_EQUAL, TOKEN_STRING_VALUE,
-TOKEN_SEMICOLON]
-
-Output:
-Program(
-    VarDeclaration(
-        name: x
-        type: string
-        value: "abc"
-    )
-    Print(
-        "Hello World!"
-    )
-    IfStatement(
-        condition: 5 > 4
-        Block(
-            Print(
-                "Hello again."
-            )
-        )
-    )
-)
-*/
-
-/* Grammar:
-Program ::= statement*
-
-statement ::= IfStatement | Print | VarDeclaration | ForLoop | VarUpdate |
-Function | FunctionCall | ReturnStatement
-
-Function ::= "func" ("int" | "string") IDENTIFIER "(" ParameterList ")" "{"
-statement* ReturnStatement "}"
-
-ParameterList ::= ( ("int" | "string") IDENTIFIER ("," ("int" | "string")
-IDENTIFIER)* )?
-
-ReturnStatement ::= "return" expression ";"
-
-CallExpression ::= (thread | process)? IDENTIFIER "(" ArgumentList ")"
-FunctionCall    ::= CallExpression ";"
-AwaitStatement ::= "await" "{" IDENTIFIER ("," IDENTIFIER)* "}"
-
-ArgumentList ::= (expression ("," expression)*)?
-
-IfStatement ::= "if" "(" expression ")" "{" statement* "}"
-         | "if" "(" expression ")" "{" statement* "}" "else" "{" statement* "}"
-         | "if" "(" expression ")" "{" statement* "}" "else" IfStatement
-
-Print ::= "print" "(" expression ")" ";"
-
-VarDeclaration ::= ("int" | "string") IDENTIFIER "=" expression | CallExpression
-";"
-
-VarUpdate ::= IDENTIFIER ("+" | "-")? "=" expression
-
-ForLoop ::= "for" "(" VarDeclaration ";" expression ";" expression ")" "{"
-statement*
-"}"
-
-expression ::= comparison (("&&" | "||") comparison)*
-
-comparison ::= term (("==" | "!=" | "<" | ">" | "<=" | ">=") term)*
-
-term ::= factor (("+" | "-") factor)*
-
-factor ::= unary (("*" | "/") unary)*
-
-unary ::= "!" unary | primary
-
-primary ::= TOKEN_INT_VALUE | TOKEN_STRING_VALUE | IDENTIFIER | "(" expression
-")"
- */
-
-/**
- * Consumes and returns the next token, advancing the lexer position.
- * Validates that the token matches the expected type.
- * @param lexer Pointer to the lexer instance
- * @param expected The expected token type
- * @return The next token from the input
- */
-static Token consume(Lexer *lexer, TokenType expected)
-{
-  Token token = next_token(lexer);
-  if (token.type != expected)
-  {
-    fprintf(stderr, "Parser error: Expected token type %d but got type %d\n",
-            expected, token.type);
+static void *check_alloc(void *ptr) {
+  if (!ptr) {
+    fprintf(stderr, "Parser error: Memory allocation failed\n");
     exit(1);
   }
-  return token;
+  return ptr;
 }
 
-/**
- * Returns the next token without advancing the lexer position (lookahead).
- * Creates a copy of the lexer to preserve the original position.
- * @param lexer Pointer to the lexer instance
- * @return The next token (without consuming it)
- */
-static Token peek(Lexer *lexer)
-{
-  Lexer copy = *lexer;
-  return next_token(&copy);
-}
-
+/* Forward declarations */
 static Node *parse_statement(Lexer *lexer);
 static Node *parse_if_statement(Lexer *lexer);
 static Node *parse_print(Lexer *lexer);
@@ -133,7 +37,6 @@ static Node *parse_for_loop(Lexer *lexer);
 static Node *parse_function(Lexer *lexer);
 static Node *parse_return_statement(Lexer *lexer);
 static Node *parse_function_call(Lexer *lexer);
-static Node *parse_thread(Lexer *lexer);
 static Node *parse_block(Lexer *lexer);
 static Node *parse_expression(Lexer *lexer);
 static Node *parse_comparison(Lexer *lexer);
@@ -141,17 +44,28 @@ static Node *parse_term(Lexer *lexer);
 static Node *parse_factor(Lexer *lexer);
 static Node *parse_unary(Lexer *lexer);
 static Node *parse_primary(Lexer *lexer);
-static Node *parse_parallel_statement(Lexer *lexer);
 static Node *parse_await(Lexer *lexer);
 
-static int peek_after_identifier_is_left_paren(Lexer *lexer)
-{
+static Token consume(Lexer *lexer, TokenType expected) {
+  Token token = next_token(lexer);
+  if (token.type != expected) {
+    fprintf(stderr, "Parser error: Expected token type %d but got type %d\n",
+            expected, token.type);
+    exit(1);
+  }
+  return token;
+}
+
+static Token peek(Lexer *lexer) {
+  Lexer copy = *lexer;
+  return next_token(&copy);
+}
+
+static int peek_is_left_paren_after_identifier(Lexer *lexer) {
   Lexer copy = *lexer;
   next_token(&copy);
   return next_token(&copy).type == TOKEN_LEFT_PAREN;
 }
-
-static int next_parallel_id = 0;
 
 /**
  * Parses the entire program as a sequence of statements.
@@ -160,28 +74,24 @@ static int next_parallel_id = 0;
  * @return A NODE_PROGRAM node containing all parsed statements
  */
 // Program ::= statement*
-Node *parse(Lexer *lexer)
-{
-  Node *node = malloc(sizeof(Node));
+Node *parse(Lexer *lexer) {
+  Node *node = check_alloc(malloc(sizeof(Node)));
   node->type = NODE_PROGRAM;
 
   int statement_count = 0;
   int statement_capacity = 4;
-  Node **statements = malloc(sizeof(Node *) * statement_capacity);
+  Node **statements = check_alloc(malloc(sizeof(Node *) * statement_capacity));
 
-  while (1)
-  {
+  while (1) {
     Token token = peek(lexer);
 
-    if (token.type == TOKEN_ILLEGAL || token.type == TOKEN_EOF)
-    {
+    if (token.type == TOKEN_ILLEGAL || token.type == TOKEN_EOF) {
       break;
     }
 
-    if (statement_count >= statement_capacity)
-    {
+    if (statement_count >= statement_capacity) {
       statement_capacity *= 2;
-      statements = realloc(statements, sizeof(Node *) * statement_capacity);
+      statements = check_alloc(realloc(statements, sizeof(Node *) * statement_capacity));
     }
 
     statements[statement_count] = parse_statement(lexer);
@@ -200,51 +110,33 @@ Node *parse(Lexer *lexer)
  * @return A Node representing the parsed statement
  */
 // statement ::= IfStatement | Print | VarDeclaration
-static Node *parse_statement(Lexer *lexer)
-{
+static Node *parse_statement(Lexer *lexer) {
   Token token = peek(lexer);
 
-  if (token.type == TOKEN_PRINT)
-  {
+  if (token.type == TOKEN_PRINT) {
     return parse_print(lexer);
-  }
-  else if (token.type == TOKEN_IF)
-  {
+  } else if (token.type == TOKEN_IF) {
     return parse_if_statement(lexer);
-  }
-  else if (token.type == TOKEN_INT_TYPE || token.type == TOKEN_STRING_TYPE)
-  {
+  } else if (token.type == TOKEN_INT_TYPE || token.type == TOKEN_STRING_TYPE) {
     return parse_var_declaration(lexer);
-  } else if (token.type == TOKEN_PARALLEL) {
-    return parse_parallel_statement(lexer);  
   } else if (token.type == TOKEN_IDENTIFIER) {
-    if (peek_after_identifier_is_left_paren(lexer)) {
-      return parse_function_call(lexer);
+    if (peek_is_left_paren_after_identifier(lexer)) {
     }
     return parse_var_update_with_semicolon(lexer);
-  }
-  else if (token.type == TOKEN_FOR)
-  {
-    return parse_for_loop(lexer);
-  } else if (token.type == TOKEN_THREAD) {
+  } else if (token.type == TOKEN_FOR) {
     return parse_for_loop(lexer);
   } else if (token.type == TOKEN_FUNCTION) {
     return parse_function(lexer);
-  }
-  else if (token.type == TOKEN_RETURN)
-  {
+  } else if (token.type == TOKEN_RETURN) {
     return parse_return_statement(lexer);
-  }
-  else if (token.type == TOKEN_PROCESS)
-  {
+  } else if (token.type == TOKEN_PROCESS) {
     return parse_function_call(lexer);
-  }
-  else if (token.type == TOKEN_THREAD)
-  {
-    return parse_thread(lexer);
-  }
-  else if (token.type == TOKEN_AWAIT)
-  {
+  } else if (token.type == TOKEN_THREAD) {
+    consume(lexer, TOKEN_THREAD);
+    Node *node = parse_function_call(lexer);
+    node->body.function_call.type = PARALLEL_TYPE_THREAD;
+    return node;
+  } else if (token.type == TOKEN_AWAIT) {
     return parse_await(lexer);
   }
   fprintf(stderr, "Error: Unexpected token '%s' of type '%d'\n",
@@ -264,7 +156,7 @@ static Node *parse_statement(Lexer *lexer)
 //      | "if" "(" expression ")" "{" statement* "}" "else" IfStatement
 static Node *parse_if_statement(Lexer *lexer)
 {
-  Node *node = malloc(sizeof(Node));
+  Node *node = check_alloc(malloc(sizeof(Node)));
   node->type = NODE_IF_STATEMENT;
 
   consume(lexer, TOKEN_IF);         // if
@@ -304,7 +196,7 @@ static Node *parse_if_statement(Lexer *lexer)
 // Print ::= "print" "(" expression ")" ";"
 static Node *parse_print(Lexer *lexer)
 {
-  Node *node = malloc(sizeof(Node));
+  Node *node = check_alloc(malloc(sizeof(Node)));
   node->type = NODE_PRINT;
 
   consume(lexer, TOKEN_PRINT);      // print
@@ -325,7 +217,7 @@ static Node *parse_print(Lexer *lexer)
 // VarDeclaration ::= ("int" | "string") IDENTIFIER "=" expression ";"
 static Node *parse_var_declaration(Lexer *lexer)
 {
-  Node *node = malloc(sizeof(Node));
+  Node *node = check_alloc(malloc(sizeof(Node)));
   node->type = NODE_VAR_DECLARATION;
 
   Token type_token = peek(lexer);
@@ -342,8 +234,23 @@ static Node *parse_var_declaration(Lexer *lexer)
 
   Token variable_name = consume(lexer, TOKEN_IDENTIFIER); // identifier
   consume(lexer, TOKEN_EQUAL);                            // =
-  Node *expression = parse_expression(lexer);
-  consume(lexer, TOKEN_SEMICOLON); // ;
+
+  Node *expression;
+  if (peek(lexer).type == TOKEN_THREAD) {
+    consume(lexer, TOKEN_THREAD);
+    expression = parse_function_call(lexer);
+    expression->body.function_call.type = PARALLEL_TYPE_THREAD;
+    node->body.var_declaration.variable_parallel_type = PARALLEL_TYPE_THREAD;
+  } else if (peek(lexer).type == TOKEN_PROCESS) {
+    consume(lexer, TOKEN_PROCESS);
+    expression = parse_function_call(lexer);
+    expression->body.function_call.type = PARALLEL_TYPE_PROCESS;
+    node->body.var_declaration.variable_parallel_type = PARALLEL_TYPE_PROCESS;
+  } else {
+    expression = parse_expression(lexer);
+    node->body.var_declaration.variable_parallel_type = PARALLEL_TYPE_REGULAR;
+    consume(lexer, TOKEN_SEMICOLON); // ;
+  }
 
   node->body.var_declaration.variable_name = variable_name.value.string_value;
   node->body.var_declaration.variable_value = expression;
@@ -354,7 +261,7 @@ static Node *parse_var_declaration(Lexer *lexer)
 // VarUpdate ::= IDENTIFIER ("+" | "-")? "=" expression ";"
 static Node *parse_var_update(Lexer *lexer)
 {
-  Node *node = malloc(sizeof(Node));
+  Node *node = check_alloc(malloc(sizeof(Node)));
   node->type = NODE_VAR_UPDATE;
 
   Token variable_name = consume(lexer, TOKEN_IDENTIFIER);
@@ -399,12 +306,12 @@ static Node *parse_var_update_with_semicolon(Lexer *lexer)
 // for_loop ::= "for" "(" varDeclaration ";" expression ";" varUpdate ")" Block
 static Node *parse_for_loop(Lexer *lexer)
 {
-  Node *node = malloc(sizeof(Node));
+  Node *node = check_alloc(malloc(sizeof(Node)));
   node->type = NODE_FOR_LOOP;
 
-  node->body.for_loop.type = 0;
+  node->body.for_loop.type = PARALLEL_TYPE_REGULAR;
   if (peek(lexer).type == TOKEN_THREAD) {
-    node->body.for_loop.type = 1;
+    node->body.for_loop.type = PARALLEL_TYPE_THREAD;
     consume(lexer, TOKEN_THREAD);
     consume(lexer, TOKEN_EQUAL);
     node->body.for_loop.thread_amount =
@@ -426,7 +333,7 @@ static Node *parse_for_loop(Lexer *lexer)
 
 static Node *parse_function(Lexer *lexer)
 {
-  Node *node = malloc(sizeof(Node));
+  Node *node = check_alloc(malloc(sizeof(Node)));
   node->type = NODE_FUNCTION;
 
   consume(lexer, TOKEN_FUNCTION);
@@ -442,6 +349,11 @@ static Node *parse_function(Lexer *lexer)
     consume(lexer, TOKEN_STRING_TYPE);
     node->body.function.return_type = TOKEN_STRING_TYPE;
   }
+  else if (return_type_token.type == TOKEN_VOID)
+  {
+    consume(lexer, TOKEN_VOID);
+    node->body.function.return_type = TOKEN_VOID;
+  }
 
   Token name_token = consume(lexer, TOKEN_IDENTIFIER);
   node->body.function.name = name_token.value.string_value;
@@ -450,14 +362,14 @@ static Node *parse_function(Lexer *lexer)
 
   int param_count = 0;
   int param_capacity = 4;
-  FunctionParam *params = malloc(sizeof(*params) * param_capacity);
+  FunctionParam *params = check_alloc(malloc(sizeof(*params) * param_capacity));
 
   while (peek(lexer).type != TOKEN_RIGHT_PAREN)
   {
     if (param_count >= param_capacity)
     {
       param_capacity *= 2;
-      params = realloc(params, sizeof(*params) * param_capacity);
+      params = check_alloc(realloc(params, sizeof(*params) * param_capacity));
     }
 
     Token param_type_token = peek(lexer);
@@ -491,14 +403,14 @@ static Node *parse_function(Lexer *lexer)
 
   int statement_count = 0;
   int statement_capacity = 4;
-  Node **statements = malloc(sizeof(Node *) * statement_capacity);
+  Node **statements = check_alloc(malloc(sizeof(Node *) * statement_capacity));
 
   while (peek(lexer).type != TOKEN_RIGHT_CURLYBRACKET)
   {
     if (statement_count >= statement_capacity)
     {
       statement_capacity *= 2;
-      statements = realloc(statements, sizeof(Node *) * statement_capacity);
+      statements = check_alloc(realloc(statements, sizeof(Node *) * statement_capacity));
     }
     statements[statement_count] = parse_statement(lexer);
     statement_count++;
@@ -514,7 +426,7 @@ static Node *parse_function(Lexer *lexer)
 
 static Node *parse_return_statement(Lexer *lexer)
 {
-  Node *node = malloc(sizeof(Node));
+  Node *node = check_alloc(malloc(sizeof(Node)));
   node->type = NODE_RETURN_STATEMENT;
 
   consume(lexer, TOKEN_RETURN);
@@ -524,43 +436,13 @@ static Node *parse_return_statement(Lexer *lexer)
   return node;
 }
 
-static Node *parse_parallel_statement(Lexer *lexer) {
-  Node *node = malloc(sizeof(Node));
-  node->type = NODE_PARALLEL;
-  node->body.parallel.parallel_id = next_parallel_id++;
-
-  consume(lexer, TOKEN_PARALLEL);
-  consume(lexer, TOKEN_LEFT_CURLYBRACKET);
-
-  int section_count = 0;
-  int section_capacity = 4;
-  Node **sections = malloc(sizeof(Node *) * section_capacity);
-
-  while (peek(lexer).type != TOKEN_RIGHT_CURLYBRACKET) {
-    if (section_count >= section_capacity) {
-      section_capacity *= 2;
-      sections = realloc(sections, sizeof(Node *) * section_capacity);
-    }
-
-    sections[section_count] = parse_statement(lexer);
-    section_count++;
-  }
-
-  consume(lexer, TOKEN_RIGHT_CURLYBRACKET);
-
-  node->body.parallel.sections = sections;
-  node->body.parallel.section_count = section_count;
-
-  return node;
-}
-
 static Node *parse_function_call(Lexer *lexer) {
-  Node *node = malloc(sizeof(Node));
+  Node *node = check_alloc(malloc(sizeof(Node)));
   node->type = NODE_FUNCTION_CALL;
 
-  node->body.function_call.type = 0;
+  node->body.function_call.type = PARALLEL_TYPE_REGULAR;
   if (peek(lexer).type == TOKEN_PROCESS) {
-    node->body.function_call.type = 2;
+    node->body.function_call.type = PARALLEL_TYPE_PROCESS;
     consume(lexer, TOKEN_PROCESS);
   }
 
@@ -571,14 +453,14 @@ static Node *parse_function_call(Lexer *lexer) {
 
   int arg_count = 0;
   int arg_capacity = 4;
-  Node **arguments = malloc(sizeof(Node *) * arg_capacity);
+  Node **arguments = check_alloc(malloc(sizeof(Node *) * arg_capacity));
 
   while (peek(lexer).type != TOKEN_RIGHT_PAREN)
   {
     if (arg_count >= arg_capacity)
     {
       arg_capacity *= 2;
-      arguments = realloc(arguments, sizeof(Node *) * arg_capacity);
+      arguments = check_alloc(realloc(arguments, sizeof(Node *) * arg_capacity));
     }
     arguments[arg_count] = parse_expression(lexer);
     arg_count++;
@@ -606,20 +488,20 @@ static Node *parse_function_call(Lexer *lexer) {
 // Block ::= "{" statement* "}"
 static Node *parse_block(Lexer *lexer)
 {
-  Node *node = malloc(sizeof(Node));
+  Node *node = check_alloc(malloc(sizeof(Node)));
   node->type = NODE_BLOCK;
 
   int statement_count = 0;
   int statement_capacity = 4;
   consume(lexer, TOKEN_LEFT_CURLYBRACKET); // {
-  Node **statements = malloc(sizeof(Node *) * statement_capacity);
+  Node **statements = check_alloc(malloc(sizeof(Node *) * statement_capacity));
 
   while (peek(lexer).type != TOKEN_RIGHT_CURLYBRACKET)
   {
     if (statement_count >= statement_capacity)
     {
       statement_capacity *= 2;
-      statements = realloc(statements, sizeof(Node *) * statement_capacity);
+      statements = check_alloc(realloc(statements, sizeof(Node *) * statement_capacity));
     }
     statements[statement_count] = parse_statement(lexer);
     statement_count++;
@@ -650,7 +532,7 @@ static Node *parse_expression(Lexer *lexer)
     consume(lexer, operator_type);
     Node *right_operand = parse_comparison(lexer);
 
-    Node *node = malloc(sizeof(Node));
+    Node *node = check_alloc(malloc(sizeof(Node)));
     node->type = NODE_BINARY_OPERATION;
     node->body.binary_operation.operator_type = operator_type;
     node->body.binary_operation.left_operand = left_operand;
@@ -683,7 +565,7 @@ static Node *parse_comparison(Lexer *lexer)
     consume(lexer, operator_token.type);
     Node *right_operand = parse_term(lexer);
 
-    Node *node = malloc(sizeof(Node));
+    Node *node = check_alloc(malloc(sizeof(Node)));
     node->type = NODE_BINARY_OPERATION;
     node->body.binary_operation.operator_type = operator_token.type;
     node->body.binary_operation.left_operand = left_operand;
@@ -713,7 +595,7 @@ static Node *parse_term(Lexer *lexer)
     consume(lexer, operator_type);
     Node *right_operand = parse_factor(lexer);
 
-    Node *node = malloc(sizeof(Node));
+    Node *node = check_alloc(malloc(sizeof(Node)));
     node->type = NODE_BINARY_OPERATION;
     node->body.binary_operation.operator_type = operator_type;
     node->body.binary_operation.left_operand = left_operand;
@@ -742,7 +624,7 @@ static Node *parse_factor(Lexer *lexer)
     consume(lexer, operator_type);
     Node *right_operand = parse_unary(lexer);
 
-    Node *node = malloc(sizeof(Node));
+    Node *node = check_alloc(malloc(sizeof(Node)));
     node->type = NODE_BINARY_OPERATION;
     node->body.binary_operation.operator_type = operator_type;
     node->body.binary_operation.left_operand = left_operand;
@@ -766,7 +648,7 @@ static Node *parse_unary(Lexer *lexer)
   {
     consume(lexer, TOKEN_NOT); // !
 
-    Node *node = malloc(sizeof(Node));
+    Node *node = check_alloc(malloc(sizeof(Node)));
     node->type = NODE_UNARY_OPERATION;
     node->body.unary_operation.operator_type = TOKEN_NOT;
     node->body.unary_operation.operand = parse_unary(lexer);
@@ -791,7 +673,7 @@ static Node *parse_primary(Lexer *lexer)
   if (token.type == TOKEN_INT_VALUE)
   {
     consume(lexer, TOKEN_INT_VALUE);
-    Node *node = malloc(sizeof(Node));
+    Node *node = check_alloc(malloc(sizeof(Node)));
     node->type = NODE_INT_VALUE;
     node->body.int_value.value = token.value.int_value;
     return node;
@@ -799,7 +681,7 @@ static Node *parse_primary(Lexer *lexer)
   else if (token.type == TOKEN_STRING_VALUE)
   {
     consume(lexer, TOKEN_STRING_VALUE);
-    Node *node = malloc(sizeof(Node));
+    Node *node = check_alloc(malloc(sizeof(Node)));
     node->type = NODE_STRING_VALUE;
     node->body.string_value.value = token.value.string_value;
     return node;
@@ -809,7 +691,7 @@ static Node *parse_primary(Lexer *lexer)
     consume(lexer, TOKEN_IDENTIFIER);
     if (peek(lexer).type == TOKEN_LEFT_PAREN)
     {
-      Node *node = malloc(sizeof(Node));
+      Node *node = check_alloc(malloc(sizeof(Node)));
       node->type = NODE_FUNCTION_CALL;
       node->body.function_call.name = token.value.string_value;
 
@@ -817,14 +699,14 @@ static Node *parse_primary(Lexer *lexer)
 
       int arg_count = 0;
       int arg_capacity = 4;
-      Node **arguments = malloc(sizeof(Node *) * arg_capacity);
+      Node **arguments = check_alloc(malloc(sizeof(Node *) * arg_capacity));
 
       while (peek(lexer).type != TOKEN_RIGHT_PAREN)
       {
         if (arg_count >= arg_capacity)
         {
           arg_capacity *= 2;
-          arguments = realloc(arguments, sizeof(Node *) * arg_capacity);
+          arguments = check_alloc(realloc(arguments, sizeof(Node *) * arg_capacity));
         }
         arguments[arg_count] = parse_expression(lexer);
         arg_count++;
@@ -842,7 +724,7 @@ static Node *parse_primary(Lexer *lexer)
 
       return node;
     }
-    Node *node = malloc(sizeof(Node));
+    Node *node = check_alloc(malloc(sizeof(Node)));
     node->type = NODE_IDENTIFIER;
     node->body.identifier.name = token.value.string_value;
     return node;
@@ -860,48 +742,122 @@ static Node *parse_primary(Lexer *lexer)
   exit(1);
 }
 
-static Node *parse_thread(Lexer *lexer)
+static Node *parse_await(Lexer *lexer)
 {
-  Node *node = malloc(sizeof(Node));
-  node->type = NODE_THREAD;
+  Node *node = check_alloc(malloc(sizeof(Node)));
+  node->type = NODE_AWAIT;
 
-  consume(lexer, TOKEN_THREAD);
-  
-  Token name_token = consume(lexer, TOKEN_IDENTIFIER);
-  node->body.thread.name = name_token.value.string_value;
-  
-  consume(lexer, TOKEN_LEFT_PAREN);
-  consume(lexer, TOKEN_RIGHT_PAREN);  
-  
+  consume(lexer, TOKEN_AWAIT);
   consume(lexer, TOKEN_LEFT_CURLYBRACKET);
+
+  int count = 0;
+  int capacity = 4;
+  Node **names = check_alloc(malloc(sizeof(Node *) * (size_t)capacity));
+
+  while (peek(lexer).type != TOKEN_RIGHT_CURLYBRACKET) {
+    if (count >= capacity) {
+      capacity *= 2;
+      names = check_alloc(realloc(names, sizeof(Node *) * (size_t)capacity));
+    }
+    Token name_token = consume(lexer, TOKEN_IDENTIFIER);
+    Node *id_node = check_alloc(malloc(sizeof(Node)));
+    id_node->type = NODE_IDENTIFIER;
+    id_node->body.identifier.name = name_token.value.string_value;
+    names[count] = id_node;
+    count++;
+
+    if (peek(lexer).type == TOKEN_COMMA) {
+      consume(lexer, TOKEN_COMMA);
+    }
+  }
+
   consume(lexer, TOKEN_RIGHT_CURLYBRACKET);
-  
+  consume(lexer, TOKEN_SEMICOLON);
+
+  node->body.thread.name = count > 0 ? names[0]->body.identifier.name : "";
+  node->body.thread.statements = names;
+  node->body.thread.statement_count = count;
+
   return node;
 }
 
-static Node *parse_await(Lexer *lexer)
-{
-  Token token = peek(lexer);
-  if (token.type == TOKEN_AWAIT)
-  {
+void free_node(Node *node) {
+  if (!node)
+    return;
 
-    Node *node = malloc(sizeof(Node));
-    node->type = NODE_AWAIT;
-
-    consume(lexer, TOKEN_AWAIT);
-
-    Token name_token = consume(lexer, TOKEN_IDENTIFIER);
-    node->body.thread.name = name_token.value.string_value;
-
-    consume(lexer, TOKEN_LEFT_PAREN);
-    consume(lexer, TOKEN_RIGHT_PAREN);
-
-    consume(lexer, TOKEN_LEFT_CURLYBRACKET);
-    consume(lexer, TOKEN_RIGHT_CURLYBRACKET);
-
-    return node;
+  switch (node->type) {
+  case NODE_PROGRAM:
+    for (int i = 0; i < node->body.program.statement_count; i++)
+      free_node(node->body.program.statements[i]);
+    free(node->body.program.statements);
+    break;
+  case NODE_BLOCK:
+    for (int i = 0; i < node->body.block.statement_count; i++)
+      free_node(node->body.block.statements[i]);
+    free(node->body.block.statements);
+    break;
+  case NODE_VAR_DECLARATION:
+    free(node->body.var_declaration.variable_name);
+    free_node(node->body.var_declaration.variable_value);
+    break;
+  case NODE_VAR_UPDATE:
+    free(node->body.var_update.variable_name);
+    free_node(node->body.var_update.value);
+    break;
+  case NODE_IF_STATEMENT:
+    free_node(node->body.if_statement.condition);
+    free_node(node->body.if_statement.then_branch);
+    free_node(node->body.if_statement.else_branch);
+    break;
+  case NODE_FOR_LOOP:
+    free_node(node->body.for_loop.initializer);
+    free_node(node->body.for_loop.condition);
+    free_node(node->body.for_loop.updater);
+    free_node(node->body.for_loop.body);
+    break;
+  case NODE_FUNCTION:
+    free(node->body.function.name);
+    for (int i = 0; i < node->body.function.param_count; i++)
+      free(node->body.function.params[i].name);
+    free(node->body.function.params);
+    for (int i = 0; i < node->body.function.statement_count; i++)
+      free_node(node->body.function.statements[i]);
+    free(node->body.function.statements);
+    break;
+  case NODE_PRINT:
+    free_node(node->body.print.print_value);
+    break;
+  case NODE_RETURN_STATEMENT:
+    free_node(node->body.return_statement.expression);
+    break;
+  case NODE_FUNCTION_CALL:
+    free(node->body.function_call.name);
+    for (int i = 0; i < node->body.function_call.argument_count; i++)
+      free_node(node->body.function_call.arguments[i]);
+    free(node->body.function_call.arguments);
+    break;
+  case NODE_BINARY_OPERATION:
+    free_node(node->body.binary_operation.left_operand);
+    free_node(node->body.binary_operation.right_operand);
+    break;
+  case NODE_UNARY_OPERATION:
+    free_node(node->body.unary_operation.operand);
+    break;
+  case NODE_STRING_VALUE:
+    free(node->body.string_value.value);
+    break;
+  case NODE_IDENTIFIER:
+    free(node->body.identifier.name);
+    break;
+  case NODE_AWAIT:
+    for (int i = 0; i < node->body.thread.statement_count; i++)
+      free_node(node->body.thread.statements[i]);
+    free(node->body.thread.statements);
+    break;
+  case NODE_INT_VALUE:
+  case NODE_THREAD:
+    break;
   }
-  // Unexpected token
-  fprintf(stderr, "Parser error: Unexpected token\n");
-  exit(1);
+
+  free(node);
 }

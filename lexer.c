@@ -42,9 +42,21 @@ static char peek(Lexer *lexer) { return lexer->input[lexer->position]; }
  * @param lexer Pointer to the lexer instance
  * @return The next Token from the input
  */
+void free_token(Token *token) {
+  if (token->type == TOKEN_IDENTIFIER || token->type == TOKEN_STRING_VALUE) {
+    free(token->value.string_value);
+    token->value.string_value = NULL;
+  }
+}
+
 Token next_token(Lexer *lexer) {
   LexerState state = STATE_START;
-  char current_token_buffer[64];
+  int buffer_capacity = 64;
+  char *current_token_buffer = malloc((size_t)buffer_capacity);
+  if (!current_token_buffer) {
+    fprintf(stderr, "Error: Memory allocation failed\n");
+    exit(1);
+  }
   int current_token_length = 0;
 
   while (lexer->position < lexer->length) {
@@ -55,41 +67,49 @@ Token next_token(Lexer *lexer) {
       Token token;
       token.type = TOKEN_SEMICOLON;
       lexer->position++;
+      free(current_token_buffer);
       return token;
     } else if (state == STATE_START && current_character == '(') {
       Token token;
       token.type = TOKEN_LEFT_PAREN;
       lexer->position++;
+      free(current_token_buffer);
       return token;
     } else if (state == STATE_START && current_character == ')') {
       Token token;
       token.type = TOKEN_RIGHT_PAREN;
       lexer->position++;
+      free(current_token_buffer);
       return token;
     } else if (state == STATE_START && current_character == '{') {
       Token token;
       token.type = TOKEN_LEFT_CURLYBRACKET;
       lexer->position++;
+      free(current_token_buffer);
       return token;
     } else if (state == STATE_START && current_character == '}') {
       Token token;
       token.type = TOKEN_RIGHT_CURLYBRACKET;
       lexer->position++;
+      free(current_token_buffer);
       return token;
     } else if (state == STATE_START && current_character == '*') {
       Token token;
       token.type = TOKEN_MULTIPLY;
       lexer->position++;
+      free(current_token_buffer);
       return token;
     } else if (state == STATE_START && current_character == '/') {
       Token token;
       token.type = TOKEN_DIVIDE;
       lexer->position++;
+      free(current_token_buffer);
       return token;
     } else if (state == STATE_START && current_character == ',') {
       Token token;
       token.type = TOKEN_COMMA;
       lexer->position++;
+      free(current_token_buffer);
       return token;
     }
 
@@ -99,6 +119,14 @@ Token next_token(Lexer *lexer) {
               current_character == '>' || current_character == '&' ||
               current_character == '|' || current_character == '!' ||
               current_character == '+' || current_character == '-')) {
+      if (current_token_length >= buffer_capacity - 1) {
+        buffer_capacity *= 2;
+        current_token_buffer = realloc(current_token_buffer, (size_t)buffer_capacity);
+        if (!current_token_buffer) {
+          fprintf(stderr, "Error: Memory allocation failed\n");
+          exit(1);
+        }
+      }
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
@@ -108,6 +136,14 @@ Token next_token(Lexer *lexer) {
                 current_character == '>' || current_character == '&' ||
                 current_character == '|' || current_character == '!' ||
                 current_character == '+' || current_character == '-')) {
+      if (current_token_length >= buffer_capacity - 1) {
+        buffer_capacity *= 2;
+        current_token_buffer = realloc(current_token_buffer, (size_t)buffer_capacity);
+        if (!current_token_buffer) {
+          fprintf(stderr, "Error: Memory allocation failed\n");
+          exit(1);
+        }
+      }
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
@@ -142,26 +178,44 @@ Token next_token(Lexer *lexer) {
         token.type = TOKEN_MINUS;
       } else if (strcmp(current_token_buffer, "+=") == 0) {
         token.type = TOKEN_PLUS_EQUAL;
+      } else if (strcmp(current_token_buffer, "++") == 0) {
+        token.type = TOKEN_PLUS_PLUS;
       } else if (strcmp(current_token_buffer, "-=") == 0) {
         token.type = TOKEN_MINUS_EQUAL;
-      } else if (strcmp(current_token_buffer, "++")) {
-        token.type = TOKEN_PLUS_PLUS;
       } else {
         token.type = TOKEN_ILLEGAL;
       }
 
+      free(current_token_buffer);
       return token;
     }
 
     // Identifiers & Keywords
     else if (state == STATE_START &&
              (current_character == '_' || isalpha(current_character))) {
+      if (current_token_length >= buffer_capacity - 1) {
+        buffer_capacity *= 2;
+        current_token_buffer = realloc(current_token_buffer, (size_t)buffer_capacity);
+        if (!current_token_buffer) {
+          fprintf(stderr, "Error: Memory allocation failed\n");
+          exit(1);
+        }
+      }
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
       state = STATE_IN_IDENTIFIER;
     } else if (state == STATE_IN_IDENTIFIER &&
-               (current_character == '_' || isalpha(current_character))) {
+               (current_character == '_' || isalpha(current_character) ||
+                isdigit(current_character))) {
+      if (current_token_length >= buffer_capacity - 1) {
+        buffer_capacity *= 2;
+        current_token_buffer = realloc(current_token_buffer, (size_t)buffer_capacity);
+        if (!current_token_buffer) {
+          fprintf(stderr, "Error: Memory allocation failed\n");
+          exit(1);
+        }
+      }
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
@@ -170,12 +224,13 @@ Token next_token(Lexer *lexer) {
 
       Token token;
       token.type = TOKEN_IDENTIFIER;
-      token.value.string_value = strdup(current_token_buffer);
 
       if (strcmp(current_token_buffer, "int") == 0) {
         token.type = TOKEN_INT_TYPE;
       } else if (strcmp(current_token_buffer, "string") == 0) {
         token.type = TOKEN_STRING_TYPE;
+      } else if (strcmp(current_token_buffer, "void") == 0) {
+        token.type = TOKEN_VOID;
       } else if (strcmp(current_token_buffer, "print") == 0) {
         token.type = TOKEN_PRINT;
       } else if (strcmp(current_token_buffer, "if") == 0) {
@@ -194,12 +249,17 @@ Token next_token(Lexer *lexer) {
         token.type = TOKEN_RETURN;
       } else if (strcmp(current_token_buffer, "await") == 0) {
         token.type = TOKEN_AWAIT;
-      } else if (strcmp(current_token_buffer, "thread") == 0) {
-        token.type = TOKEN_THREAD;
-      } else if (strcmp(current_token_buffer, "parallel") == 0) {
-        token.type = TOKEN_PARALLEL;
       }
 
+      if (token.type == TOKEN_IDENTIFIER) {
+        token.value.string_value = strdup(current_token_buffer);
+        if (!token.value.string_value) {
+          fprintf(stderr, "Error: Memory allocation failed\n");
+          exit(1);
+        }
+      }
+
+      free(current_token_buffer);
       return token;
     }
 
@@ -208,6 +268,14 @@ Token next_token(Lexer *lexer) {
       lexer->position++;
       state = STATE_IN_STRING;
     } else if (state == STATE_IN_STRING && current_character != '"') {
+      if (current_token_length >= buffer_capacity - 1) {
+        buffer_capacity *= 2;
+        current_token_buffer = realloc(current_token_buffer, (size_t)buffer_capacity);
+        if (!current_token_buffer) {
+          fprintf(stderr, "Error: Memory allocation failed\n");
+          exit(1);
+        }
+      }
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
@@ -218,16 +286,37 @@ Token next_token(Lexer *lexer) {
       Token token;
       token.type = TOKEN_STRING_VALUE;
       token.value.string_value = strdup(current_token_buffer);
+      if (!token.value.string_value) {
+        fprintf(stderr, "Error: Memory allocation failed\n");
+        exit(1);
+      }
+      free(current_token_buffer);
       return token;
     }
 
     // Integers
     else if (state == STATE_START && isdigit(current_character)) {
+      if (current_token_length >= buffer_capacity - 1) {
+        buffer_capacity *= 2;
+        current_token_buffer = realloc(current_token_buffer, (size_t)buffer_capacity);
+        if (!current_token_buffer) {
+          fprintf(stderr, "Error: Memory allocation failed\n");
+          exit(1);
+        }
+      }
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
       state = STATE_IN_INTEGER;
     } else if (state == STATE_IN_INTEGER && isdigit(current_character)) {
+      if (current_token_length >= buffer_capacity - 1) {
+        buffer_capacity *= 2;
+        current_token_buffer = realloc(current_token_buffer, (size_t)buffer_capacity);
+        if (!current_token_buffer) {
+          fprintf(stderr, "Error: Memory allocation failed\n");
+          exit(1);
+        }
+      }
       current_token_buffer[current_token_length] = current_character;
       current_token_length++;
       lexer->position++;
@@ -237,6 +326,7 @@ Token next_token(Lexer *lexer) {
       Token token;
       token.type = TOKEN_INT_VALUE;
       token.value.int_value = atoi(current_token_buffer);
+      free(current_token_buffer);
       return token;
     }
 
@@ -254,5 +344,6 @@ Token next_token(Lexer *lexer) {
 
   Token token;
   token.type = TOKEN_EOF;
+  free(current_token_buffer);
   return token;
 }

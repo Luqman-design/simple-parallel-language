@@ -1,74 +1,24 @@
-// Will: I think there has been some confusion, the TOKEN_INT_TYPE is to
-// describe "int" keyword and the variable 'x', and TOKEN_INT_VALUE is to
-// describe "123". But i guess it doesnt matter.
+/**
+ * @file semantic_analyzer.c
+ * @brief Semantic analysis for FluCs language.
+ *
+ * Performs type checking, variable scope resolution, and shared variable
+ * detection for threaded/concurrent code. Uses a scope stack with uthash
+ * hash tables for O(1) variable lookup within each scope.
+ */
 
 #include "semantic_analyzer.h"
-#include "lexer.h"
-#include "parser.h"
-#include "uthash.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 char *thread_functions[100];
 int thread_function_count = 0;
 
-/*
-Case 1:
-string a--- program ---a
-            /      \
-          if       if ---- a
-         /  \     /  \
-      int a  a  int a \
-                    float a
+static VariableEntry *scopes[MAX_SCOPE];
+static int scope_top = -1;
 
-Case 2:
-string a,
-string b,
-if {
-  int a
-  a = 10
-  b = "gg"
-}
-if {
-  string a = "abc"
-}
-if {
-  a = "test"
-},
-a
-
-Solution steps to case 2:
-steps:
-1. global scope
-[
-  scope 0:
-  { (a: str), (b: str) }
-]
-
-2. enters if
-[
-  scope 0:
-  { (a: str), (b: str) },
-
-  scope 1: <- lookup here first, the lookup parent scopes.
-  { (a: int) }
-]
-
-3. exits if
-[
-  scope 0:
-  { (a: str), (b: str) }
-]
-
-*/
-#define MAX_SCOPE 100
-
-VariableEntry *scopes[MAX_SCOPE];
-int scope_top = -1;
-
-int current_thread_id = 0;
-int next_thread_id = 1;
+static int current_thread_id = 0;
+static int next_thread_id = 1;
 
 void enter_scope();
 void exit_scope();
@@ -88,13 +38,13 @@ void enter_scope() {
 }
 
 void exit_scope() {
-  /*   VariableEntry *current, *tmp;
+  VariableEntry *current, *tmp;
 
-    HASH_ITER(hh, scopes[scope_top], current, tmp)
-    {
-      HASH_DEL(scopes[scope_top], current);
-      free(current);
-    } */
+  HASH_ITER(hh, scopes[scope_top], current, tmp)
+  {
+    HASH_DEL(scopes[scope_top], current);
+    free(current);
+  }
 
   scope_top--;
 }
@@ -110,7 +60,7 @@ void register_variable_usage(const char *name) {
       return;
   }
 
-  if (var->thread_count < 10) {
+  if (var->thread_count < MAX_THREAD_IDS) {
     var->thread_ids[var->thread_count++] = current_thread_id;
   }
 
@@ -130,6 +80,10 @@ void insert_variable(const char *name, TokenType type,
   }
 
   variable = malloc(sizeof(VariableEntry));
+  if (!variable) {
+    printf("Semantic error: Memory allocation failed\n");
+    exit(1);
+  }
   strcpy(variable->name, name);
   variable->type = type;
   variable->thread_count = 0;
@@ -246,6 +200,8 @@ TokenType analyze_expression(Node *node) {
     for (int i = 0; i < node->body.function_call.argument_count; i++) {
       analyze_expression(node->body.function_call.arguments[i]);
     }
+    /* TODO: Look up function definition to determine actual return type.
+     * Currently always returns TOKEN_INT_TYPE as a fallback. */
     return TOKEN_INT_TYPE;
   default:
     printf("Semantic error: Unsupported node type in expression analysis\n");
@@ -300,11 +256,14 @@ void analyze_node(Node *node) {
     TokenType value_type = analyze_expression(node->body.var_update.value);
 
     VariableEntry *var = lookup_variable(variable_name);
-    if (var) {
-      node->body.var_update.is_shared = var->is_shared;
-      var->variable_declaration_node->body.var_declaration.is_shared =
-          var->is_shared;
+    if (!var) {
+      printf("Semantic error: Variable %s is not declared\n", variable_name);
+      exit(1);
     }
+
+    node->body.var_update.is_shared = var->is_shared;
+    var->variable_declaration_node->body.var_declaration.is_shared =
+        var->is_shared;
 
     if (value_type != var->type) {
       printf("Semantic error: Type mismatch in variable update on %s\n",
@@ -368,46 +327,25 @@ void analyze_node(Node *node) {
   case NODE_PRINT:
     analyze_expression(node->body.print.print_value);
     break;
+
+  case NODE_AWAIT:
+    for (int i = 0; i < node->body.thread.statement_count; i++) {
+      Node *id_node = (Node *)node->body.thread.statements[i];
+      if (id_node->type == NODE_IDENTIFIER) {
+        analyze_expression(id_node);
+      }
+    }
+    break;
+
   default:
     printf("Semantic error: Unsupported node type in semantic analysis\n");
     exit(1);
-
-    case NODE_PARALLEL:
-  {
-    for (int i = 0; i < node->body.parallel.section_count; i++)
-    {
-      int old_thread_id = current_thread_id;
-      current_thread_id = next_thread_id++;
-
-      enter_scope();
-      analyze_node(node->body.parallel.sections[i]);
-      exit_scope();
-
-      current_thread_id = old_thread_id;
-    }
-    break;
-  }
-
-  case NODE_THREAD:
-  {
-    thread_functions[thread_function_count] = strdup(node->body.thread.name);
-    thread_function_count++;
-
-    int old_thread_id = current_thread_id; // gemmer den gamle thread id
-    current_thread_id = next_thread_id++;
-
-    printf("Entering thread %d\n", current_thread_id);
-
-    enter_scope();
-    for (int i = 0; i < node->body.thread.statement_count; i++) {
-      analyze_node(node->body.thread.statements[i]);
-    }
-    exit_scope();
-
-    current_thread_id = old_thread_id; // gendanner den gamle thread id
-    break;
-  }
   }
 }
 
-void semantic_analyze(Node *root) { analyze_node(root); }
+void semantic_analyze(Node *root) {
+  scope_top = -1;
+  current_thread_id = 0;
+  next_thread_id = 1;
+  analyze_node(root);
+}

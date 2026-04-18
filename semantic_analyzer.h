@@ -9,22 +9,21 @@
 #include <string.h>
 
 #define MAX_SCOPE 100
+#define MAX_NAME_LEN 32
+#define MAX_THREAD_IDS 10
 
 typedef struct {
-  char name[32];
+  char name[MAX_NAME_LEN];
   TokenType type;
-  int thread_ids[10];
+  int thread_ids[MAX_THREAD_IDS];
   int thread_count;
   int is_shared;
   UT_hash_handle hh;
 
-  // To keep in sync:
   Node *variable_declaration_node;
-  // Node *variable_update;
 } VariableEntry;
 
 VariableEntry *lookup_variable(const char *name);
-void propagate_shared_flags(Node *node);
-void semantic_analyze(Node *node);
+void semantic_analyze(Node *root);
 
 #endif
