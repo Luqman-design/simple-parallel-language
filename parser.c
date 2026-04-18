@@ -134,14 +134,38 @@ static Node *parse_statement(Lexer *lexer) {
   } else if (token.type == TOKEN_THREAD) {
     Lexer copy = *lexer;
     next_token(&copy); // skip 'thread'
-    if (next_token(&copy).type == TOKEN_EQUAL) {
+    Token next = next_token(&copy);
+    if (next.type == TOKEN_EQUAL) {
       // thread=N for(...) — threaded for loop, let parse_for_loop handle it
       return parse_for_loop(lexer);
+    } else if (next.type == TOKEN_LEFT_CURLYBRACKET) {
+      // thread { ... } — inline thread block
+      consume(lexer, TOKEN_THREAD);
+      Node *node = check_alloc(malloc(sizeof(Node)));
+      node->type = NODE_THREAD;
+      node->body.thread.name = "";
+      consume(lexer, TOKEN_LEFT_CURLYBRACKET);
+      int count = 0;
+      int capacity = 4;
+      Node **stmts = check_alloc(malloc(sizeof(Node *) * (size_t)capacity));
+      while (peek(lexer).type != TOKEN_RIGHT_CURLYBRACKET) {
+        if (count >= capacity) {
+          capacity *= 2;
+          stmts = check_alloc(realloc(stmts, sizeof(Node *) * (size_t)capacity));
+        }
+        stmts[count] = parse_statement(lexer);
+        count++;
+      }
+      consume(lexer, TOKEN_RIGHT_CURLYBRACKET);
+      node->body.thread.statements = stmts;
+      node->body.thread.statement_count = count;
+      return node;
+    } else {
+      consume(lexer, TOKEN_THREAD);
+      Node *node = parse_function_call(lexer);
+      node->body.function_call.type = PARALLEL_TYPE_THREAD;
+      return node;
     }
-    consume(lexer, TOKEN_THREAD);
-    Node *node = parse_function_call(lexer);
-    node->body.function_call.type = PARALLEL_TYPE_THREAD;
-    return node;
   } else if (token.type == TOKEN_AWAIT) {
     return parse_await(lexer);
   }
@@ -248,9 +272,7 @@ static Node *parse_var_declaration(Lexer *lexer)
     expression->body.function_call.type = PARALLEL_TYPE_THREAD;
     node->body.var_declaration.variable_parallel_type = PARALLEL_TYPE_THREAD;
   } else if (peek(lexer).type == TOKEN_PROCESS) {
-    consume(lexer, TOKEN_PROCESS);
     expression = parse_function_call(lexer);
-    expression->body.function_call.type = PARALLEL_TYPE_PROCESS;
     node->body.var_declaration.variable_parallel_type = PARALLEL_TYPE_PROCESS;
   } else {
     expression = parse_expression(lexer);

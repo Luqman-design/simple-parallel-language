@@ -5,3 +5,5 @@ thread {
     counter += 10;
     counter += 10;
 }
+
+print(counter);

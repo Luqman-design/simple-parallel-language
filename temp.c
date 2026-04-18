@@ -3,14 +3,11 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <unistd.h>
-int result = 0;
-pthread_mutex_t lock_result;
-void add(int a, int b) {pthread_mutex_lock(&lock_result);result+=(a+b);pthread_mutex_unlock(&lock_result);}
-
-void* thread_call_1(void* arg) {intptr_t* args=(intptr_t*)arg;add((int)args[0], (int)args[1]);return NULL;}
-void* thread_call_2(void* arg) {intptr_t* args=(intptr_t*)arg;add((int)args[0], (int)args[1]);return NULL;}
+int counter = 0;
+pthread_mutex_t lock_counter;
+void* thread_call_1(void* arg) {pthread_mutex_lock(&lock_counter);counter+=10;pthread_mutex_unlock(&lock_counter);pthread_mutex_lock(&lock_counter);counter+=10;pthread_mutex_unlock(&lock_counter);pthread_mutex_lock(&lock_counter);counter+=10;pthread_mutex_unlock(&lock_counter);return NULL;}
 int main() {
-pthread_mutex_init(&lock_result, NULL);
-pthread_t _thread__t1;intptr_t _args__t1[2]={4, 7};pthread_create(&_thread__t1,NULL,thread_call_1,_args__t1);pthread_t _thread__t2;intptr_t _args__t2[2]={20, 13};pthread_create(&_thread__t2,NULL,thread_call_2,_args__t2);pthread_join(_thread__t1, NULL);pthread_join(_thread__t2, NULL);printf("%d",result);
+pthread_mutex_init(&lock_counter, NULL);
+pthread_t _thread__t1;pthread_create(&_thread__t1,NULL,thread_call_1,NULL);pthread_join(_thread__t1, NULL);printf("%d",counter);
   return 0;
 }

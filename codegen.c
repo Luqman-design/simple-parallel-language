@@ -7,10 +7,6 @@
 #include <string.h>
 
 static int threaded_worker_counter = 1;
-static int thread_call_counter = 0;
-
-extern char *thread_functions[100];
-extern int thread_function_count;
 
 /* Forward declarations */
 static void emit_statement(Node *node, char **output, int *output_length,
@@ -254,6 +250,19 @@ static void emit_all_thread_call_wrappers(Node *node, char **output,
                                current_output_position, node);
       wrapper_id++;
     }
+    if (stmt->type == NODE_THREAD) {
+      char buf[256];
+      snprintf(buf, sizeof(buf), "void* thread_call_%d(void* arg) {",
+               wrapper_id);
+      add_to_output(current_output_position, output_length, output, buf);
+      for (int j = 0; j < stmt->body.thread.statement_count; j++) {
+        emit_statement(stmt->body.thread.statements[j], output, output_length,
+                       current_output_position);
+      }
+      add_to_output(current_output_position, output_length, output,
+                    "return NULL;}\n");
+      wrapper_id++;
+    }
   }
 }
 
@@ -280,6 +289,15 @@ static void emit_all_thread_call_inlines(Node *node, char **output,
       emit_thread_call_inline(stmt->body.var_declaration.variable_value,
                               result_var, wrapper_id, output, output_length,
                               current_output_position);
+      wrapper_id++;
+    }
+    if (stmt->type == NODE_THREAD) {
+      char buf[256];
+      snprintf(buf, sizeof(buf),
+               "pthread_t _thread__t%d;pthread_create(&_thread__t%d,NULL,"
+               "thread_call_%d,NULL);",
+               wrapper_id, wrapper_id, wrapper_id);
+      add_to_output(current_output_position, output_length, output, buf);
       wrapper_id++;
     }
   }
@@ -729,7 +747,6 @@ static void emit_program(Node *node, char **output, int *output_length,
                                 current_output_position);
 
   /* Emit function definitions */
-
   for (int i = 0; i < node->body.program.statement_count; i++) {
     Node *stmt = node->body.program.statements[i];
     if (stmt->type == NODE_FUNCTION) {
@@ -756,7 +773,6 @@ static void emit_program(Node *node, char **output, int *output_length,
   }
 
   threaded_worker_counter = 1;
-  thread_call_counter = 0;
 
   /* Emit thread call inlines (pthread_create calls) */
   emit_all_thread_call_inlines(node, output, output_length,
@@ -767,8 +783,9 @@ static void emit_program(Node *node, char **output, int *output_length,
     int unnamed_count = 0;
     for (int i = 0; i < node->body.program.statement_count; i++) {
       Node *stmt = node->body.program.statements[i];
-      if (stmt->type == NODE_FUNCTION_CALL &&
-          stmt->body.function_call.type == PARALLEL_TYPE_THREAD) {
+      if ((stmt->type == NODE_FUNCTION_CALL &&
+           stmt->body.function_call.type == PARALLEL_TYPE_THREAD) ||
+          stmt->type == NODE_THREAD) {
         unnamed_count++;
       }
     }
@@ -783,7 +800,8 @@ static void emit_program(Node *node, char **output, int *output_length,
     Node *stmt = node->body.program.statements[i];
     if (stmt->type == NODE_FUNCTION || stmt->type == NODE_VAR_DECLARATION ||
         (stmt->type == NODE_FUNCTION_CALL &&
-         stmt->body.function_call.type == PARALLEL_TYPE_THREAD)) {
+         stmt->body.function_call.type == PARALLEL_TYPE_THREAD) ||
+        stmt->type == NODE_THREAD) {
       continue;
     }
     emit_statement(stmt, output, output_length, current_output_position);

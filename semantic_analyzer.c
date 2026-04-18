@@ -11,8 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-char *thread_functions[100];
-int thread_function_count = 0;
+#define MAX_FUNCTIONS 100
 
 static VariableEntry *scopes[MAX_SCOPE];
 static int scope_top = -1;
@@ -20,7 +19,6 @@ static int scope_top = -1;
 static int current_thread_id = 0;
 static int next_thread_id = 1;
 
-#define MAX_FUNCTIONS 100
 static Node *function_nodes[MAX_FUNCTIONS];
 static char *function_names[MAX_FUNCTIONS];
 static int function_count = 0;
@@ -172,6 +170,30 @@ TokenType analyze_binary_operation(Node *node) {
   return TOKEN_INT_TYPE;
 }
 
+static void analyze_threaded_function_call(Node *node) {
+  Node *func = NULL;
+  for (int i = 0; i < function_count; i++) {
+    if (strcmp(function_names[i], node->body.function_call.name) == 0) {
+      func = function_nodes[i];
+      break;
+    }
+  }
+  if (func) {
+    int saved_thread_id = current_thread_id;
+    current_thread_id = next_thread_id++;
+    enter_scope();
+    for (int i = 0; i < func->body.function.param_count; i++) {
+      insert_variable(func->body.function.params[i].name,
+                      func->body.function.params[i].type, NULL);
+    }
+    for (int i = 0; i < func->body.function.statement_count; i++) {
+      analyze_node(func->body.function.statements[i]);
+    }
+    exit_scope();
+    current_thread_id = saved_thread_id;
+  }
+}
+
 TokenType analyze_expression(Node *node) {
   switch (node->type) {
   case NODE_INT_VALUE:
@@ -206,27 +228,7 @@ TokenType analyze_expression(Node *node) {
       analyze_expression(node->body.function_call.arguments[i]);
     }
     if (node->body.function_call.type == PARALLEL_TYPE_THREAD) {
-      Node *func = NULL;
-      for (int i = 0; i < function_count; i++) {
-        if (strcmp(function_names[i], node->body.function_call.name) == 0) {
-          func = function_nodes[i];
-          break;
-        }
-      }
-      if (func) {
-        int saved_thread_id = current_thread_id;
-        current_thread_id = next_thread_id++;
-        enter_scope();
-        for (int i = 0; i < func->body.function.param_count; i++) {
-          insert_variable(func->body.function.params[i].name,
-                          func->body.function.params[i].type, NULL);
-        }
-        for (int i = 0; i < func->body.function.statement_count; i++) {
-          analyze_node(func->body.function.statements[i]);
-        }
-        exit_scope();
-        current_thread_id = saved_thread_id;
-      }
+      analyze_threaded_function_call(node);
     }
     /* TODO: Look up function definition to determine actual return type.
      * Currently always returns TOKEN_INT_TYPE as a fallback. */
@@ -364,27 +366,7 @@ void analyze_node(Node *node) {
       analyze_expression(node->body.function_call.arguments[i]);
     }
     if (node->body.function_call.type == PARALLEL_TYPE_THREAD) {
-      Node *func = NULL;
-      for (int i = 0; i < function_count; i++) {
-        if (strcmp(function_names[i], node->body.function_call.name) == 0) {
-          func = function_nodes[i];
-          break;
-        }
-      }
-      if (func) {
-        int saved_thread_id = current_thread_id;
-        current_thread_id = next_thread_id++;
-        enter_scope();
-        for (int i = 0; i < func->body.function.param_count; i++) {
-          insert_variable(func->body.function.params[i].name,
-                          func->body.function.params[i].type, NULL);
-        }
-        for (int i = 0; i < func->body.function.statement_count; i++) {
-          analyze_node(func->body.function.statements[i]);
-        }
-        exit_scope();
-        current_thread_id = saved_thread_id;
-      }
+      analyze_threaded_function_call(node);
     }
     break;
 
@@ -400,6 +382,16 @@ void analyze_node(Node *node) {
       }
     }
     break;
+
+  case NODE_THREAD: {
+    int saved_thread_id = current_thread_id;
+    current_thread_id = next_thread_id++;
+    for (int i = 0; i < node->body.thread.statement_count; i++) {
+      analyze_node(node->body.thread.statements[i]);
+    }
+    current_thread_id = saved_thread_id;
+    break;
+  }
 
   default:
     printf("Semantic error: Unsupported node type in semantic analysis\n");
